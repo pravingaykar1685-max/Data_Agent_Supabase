@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>E-commerce Performance Dashboard</title>
+<style>
+/* Layout idea: summary first (tiles, trend), then segment grid, then products, customers, exceptions, insights. Snapshot of Agent 3 aggregates. */
+:root{
+  color-scheme: light;
+  --page:#f6f7f9; --surface:#fdfdfc; --ink:#0f1115; --ink-2:#4f535c; --muted:#878b93;
+  --grid:#e3e4e8; --axis:#c4c6cc; --ring:rgba(15,17,21,.09); --accent:#2a78d6;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
+  --seq-0:#e6effb; --seq-1:#b7d3f6; --seq-2:#86b6ef; --seq-3:#5598e7; --seq-4:#2a78d6; --seq-5:#1c5cab; --seq-6:#104281;
+  --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b; --good-ink:#006300;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --radius:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --page:#0f1012; --surface:#1a1b1d; --ink:#eef0f3; --ink-2:#c1c4cb; --muted:#8b8f97;
+    --grid:#2b2d31; --axis:#3a3d42; --ring:rgba(255,255,255,.09); --accent:#3987e5;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+    --seq-0:#1d2a3b; --seq-1:#184f95; --seq-2:#1c5cab; --seq-3:#256abf; --seq-4:#3987e5; --seq-5:#6da7ec; --seq-6:#9ec5f4;
+    --good-ink:#0ca30c;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --page:#0f1012; --surface:#1a1b1d; --ink:#eef0f3; --ink-2:#c1c4cb; --muted:#8b8f97;
+  --grid:#2b2d31; --axis:#3a3d42; --ring:rgba(255,255,255,.09); --accent:#3987e5;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+  --seq-0:#1d2a3b; --seq-1:#184f95; --seq-2:#1c5cab; --seq-3:#256abf; --seq-4:#3987e5; --seq-5:#6da7ec; --seq-6:#9ec5f4;
+  --good-ink:#0ca30c;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--page);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.45}
+.wrap{max-width:1280px;margin:0 auto;padding:24px clamp(16px,3vw,32px) 48px;display:flex;flex-direction:column;gap:20px}
+h1,h2,h3{text-wrap:balance;margin:0;line-height:1.2}
+h1{font-size:26px;font-weight:650;letter-spacing:-.01em}
+h2{font-size:17px;font-weight:620}
+h3{font-size:14px;font-weight:600}
+p{margin:0}
+.sub{color:var(--ink-2);font-size:13.5px}
+.muted{color:var(--muted)}
+header.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between}
+.meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--ring);background:var(--surface);border-radius:999px;padding:3px 10px;font-size:12.5px;color:var(--ink-2)}
+.chip b{color:var(--ink);font-weight:600}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+.card{background:var(--surface);border:1px solid var(--ring);border-radius:var(--radius);padding:16px 18px;min-width:0}
+.card-head{display:flex;gap:8px 12px;align-items:baseline;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px}
+.card-head .sub{font-size:12.5px}
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+@media (max-width:860px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.tile{background:var(--surface);border:1px solid var(--ring);border-radius:var(--radius);padding:14px 16px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.tile .label{font-size:12.5px;color:var(--ink-2)}
+.tile .value{font-size:26px;font-weight:620;letter-spacing:-.01em}
+.tile .note{font-size:12px;color:var(--muted)}
+.tile.hero{border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr));gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:16px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;background:var(--surface);border:1px solid var(--ring);border-radius:var(--radius);padding:10px 14px}
+.controls .lbl{font-size:12.5px;color:var(--ink-2);margin-right:4px}
+.seg{display:inline-flex;border:1px solid var(--axis);border-radius:8px;overflow:hidden}
+.seg button{font:inherit;font-size:13px;border:0;background:transparent;color:var(--ink-2);padding:5px 11px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--axis)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:#fff}
+.seg button:hover:not([aria-pressed="true"]){background:color-mix(in srgb,var(--accent) 10%,transparent)}
+button:focus-visible,.th-sort:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.linkbtn{font:inherit;font-size:12.5px;background:none;border:1px solid var(--axis);color:var(--ink-2);border-radius:6px;padding:2px 8px;cursor:pointer}
+.linkbtn:hover{color:var(--ink);border-color:var(--ink-2)}
+.chart{width:100%;position:relative}
+.chart svg{display:block;width:100%;overflow:visible}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--ink-2);margin:2px 0 6px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.key-line{width:14px;height:2px;border-radius:2px;display:inline-block}
+.key-hatch{width:14px;height:10px;display:inline-block;border:1px dashed var(--axis);border-radius:2px}
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--grid);white-space:nowrap}
+th{font-weight:600;color:var(--ink-2);font-size:12px}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.th-sort{cursor:pointer;user-select:none}
+.th-sort::after{content:" ↕";color:var(--muted);font-size:11px}
+.th-sort[aria-sort="ascending"]::after{content:" ↑";color:var(--ink)}
+.th-sort[aria-sort="descending"]::after{content:" ↓";color:var(--ink)}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;border-radius:999px;padding:2px 8px;border:1px solid var(--ring)}
+.pill i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.sev-high i{background:var(--critical)} .sev-medium i{background:var(--warning)} .sev-low i{background:var(--good)}
+.bar-cell{display:flex;align-items:center;gap:8px;min-width:120px}
+.bar-cell .b{height:6px;border-radius:3px;background:var(--s1)}
+.bar-cell .b.warn{background:var(--s2)}
+.insights{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:12px}
+.ins{border:1px solid var(--ring);border-radius:var(--radius);padding:14px 16px;background:var(--surface);display:flex;flex-direction:column;gap:8px}
+.ins .n{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.ins h3{font-size:15px}
+.ins p{font-size:13.5px;color:var(--ink-2);max-width:65ch}
+.ins .act{color:var(--ink)}
+.ins .act b{font-weight:600}
+.conf{font-size:12px;color:var(--muted)}
+.summary ul{margin:6px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.summary li{max-width:80ch}
+.caveat{border-left:3px solid var(--warning);padding:8px 12px;background:color-mix(in srgb,var(--warning) 8%,transparent);border-radius:0 6px 6px 0;font-size:13px;color:var(--ink-2)}
+footer.dq{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;font-size:12.5px;color:var(--ink-2)}
+footer.dq div b{display:block;color:var(--ink);font-size:15px;font-weight:600}
+.tooltip{position:fixed;pointer-events:none;z-index:20;background:var(--surface);color:var(--ink);border:1px solid var(--axis);border-radius:8px;padding:8px 10px;font-size:12.5px;box-shadow:0 6px 20px rgba(0,0,0,.14);max-width:260px;opacity:0;transition:opacity .08s}
+.tooltip .t{font-weight:600;margin-bottom:3px}
+.tooltip .r{display:flex;justify-content:space-between;gap:14px;font-variant-numeric:tabular-nums}
+.tooltip .r span:first-child{color:var(--ink-2);display:inline-flex;align-items:center;gap:6px}
+.axis text{fill:var(--muted);font-size:11px;font-family:var(--font)}
+.axis line,.axis path{stroke:var(--axis)}
+.gridline line{stroke:var(--grid)}
+.gridline path{display:none}
+.vlabel{fill:var(--ink-2);font-size:11.5px;font-family:var(--font);font-variant-numeric:tabular-nums}
+.clabel{fill:var(--ink);font-size:12px;font-family:var(--font)}
+.hidden{display:none !important}
+#chat-panel:empty{display:none}
+@media (prefers-reduced-motion: reduce){*{transition:none !important}}
+@media (max-width:520px){.tile .value{font-size:22px} h1{font-size:22px}}
+</style>
+</head>
+<body>
+<div class="wrap" id="dash">
+  <header class="top" id="header">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <h1>E-commerce Performance Dashboard</h1>
+      <p class="sub" id="period"></p>
+    </div>
+    <div class="meta" id="meta"></div>
+  </header>
+
+  <section class="tiles" id="kpi-tiles" aria-label="Key figures"></section>
+
+  <section class="card summary" id="exec-summary">
+    <div class="card-head"><h2>Executive summary</h2><span class="sub">From Agent 3 insights</span></div>
+    <ul id="summary-list"></ul>
+  </section>
+
+  <section class="grid2" id="trends">
+    <div class="card" id="trend-revenue">
+      <div class="card-head"><h2>Monthly net sales and net revenue</h2><button class="linkbtn" data-table-toggle="trend-revenue">Show table</button></div>
+      <p class="sub" style="margin-bottom:6px">Net revenue excludes returned orders. Shaded months are partial (Mar 2021: 6 days, Mar 2023: 25 days).</p>
+      <div class="legend"><span><i class="key-line" style="background:var(--s1)"></i>Net sales</span><span><i class="key-line" style="background:var(--s2)"></i>Net revenue</span><span><i class="key-hatch"></i>Partial month</span></div>
+      <div class="chart" id="chart-trend"></div>
+      <div class="tbl-wrap hidden" data-table-for="trend-revenue"></div>
+    </div>
+    <div class="card" id="trend-returns">
+      <div class="card-head"><h2>Monthly return rate</h2><button class="linkbtn" data-table-toggle="trend-returns">Show table</button></div>
+      <p class="sub" style="margin-bottom:6px">Share of orders returned. Dashed line marks the overall rate.</p>
+      <div class="chart" id="chart-returns"></div>
+      <div class="tbl-wrap hidden" data-table-for="trend-returns"></div>
+    </div>
+  </section>
+
+  <section class="controls" id="segment-controls" aria-label="Segment filters">
+    <span><span class="lbl">Measure</span>
+      <span class="seg" id="metric-seg" role="group" aria-label="Measure">
+        <button data-metric="net_revenue" aria-pressed="true">Net revenue</button><button data-metric="net_sales" aria-pressed="false">Net sales</button><button data-metric="orders" aria-pressed="false">Orders</button><button data-metric="aov" aria-pressed="false">AOV</button><button data-metric="return_rate_pct" aria-pressed="false">Return rate</button>
+      </span></span>
+    <span><span class="lbl">Channel (category chart)</span>
+      <span class="seg" id="channel-seg" role="group" aria-label="Channel">
+        <button data-channel="All" aria-pressed="true">All</button><button data-channel="In-store" aria-pressed="false">In-store</button><button data-channel="Online" aria-pressed="false">Online</button>
+      </span></span>
+  </section>
+
+  <section class="grid3" id="segments">
+    <div class="card" id="seg-category"><div class="card-head"><h2>By product category</h2><button class="linkbtn" data-table-toggle="seg-category">Show table</button></div><div class="chart" data-seg="product_category"></div><div class="tbl-wrap hidden" data-table-for="seg-category"></div></div>
+    <div class="card" id="seg-channel"><div class="card-head"><h2>By purchase channel</h2><button class="linkbtn" data-table-toggle="seg-channel">Show table</button></div><div class="chart" data-seg="purchase_channel"></div><div class="tbl-wrap hidden" data-table-for="seg-channel"></div></div>
+    <div class="card" id="seg-payment"><div class="card-head"><h2>By payment method</h2><button class="linkbtn" data-table-toggle="seg-payment">Show table</button></div><div class="chart" data-seg="mode_of_payment"></div><div class="tbl-wrap hidden" data-table-for="seg-payment"></div></div>
+    <div class="card" id="seg-age"><div class="card-head"><h2>By age band</h2><button class="linkbtn" data-table-toggle="seg-age">Show table</button></div><div class="chart" data-seg="age_band"></div><div class="tbl-wrap hidden" data-table-for="seg-age"></div></div>
+    <div class="card" id="seg-gender"><div class="card-head"><h2>By gender</h2><button class="linkbtn" data-table-toggle="seg-gender">Show table</button></div><div class="chart" data-seg="gender"></div><div class="tbl-wrap hidden" data-table-for="seg-gender"></div></div>
+    <div class="card" id="seg-location"><div class="card-head"><h2>By customer city</h2><button class="linkbtn" data-table-toggle="seg-location">Show table</button></div><div class="chart" data-seg="location"></div><div class="tbl-wrap hidden" data-table-for="seg-location"></div></div>
+  </section>
+
+  <section class="grid2" id="detail">
+    <div class="card" id="products">
+      <div class="card-head"><h2>Products</h2>
+        <span class="seg" id="product-seg" role="group" aria-label="Product list"><button data-plist="top" aria-pressed="true">Top 10</button><button data-plist="bottom" aria-pressed="false">Bottom 10</button><button data-plist="all" aria-pressed="false">All 30</button></span></div>
+      <p class="sub" style="margin-bottom:8px">Ranked by net revenue. Click a column to sort.</p>
+      <div class="tbl-wrap" id="product-table"></div>
+    </div>
+    <div class="card" id="heatmap">
+      <div class="card-head"><h2>Net revenue by age band and category</h2><button class="linkbtn" data-table-toggle="heatmap">Show table</button></div>
+      <p class="sub" style="margin-bottom:6px">Darker cells earn more. Hover a cell for its figures.</p>
+      <div class="chart" id="chart-heat"></div>
+      <div class="tbl-wrap hidden" data-table-for="heatmap"></div>
+    </div>
+  </section>
+
+  <section class="grid2" id="customers">
+    <div class="card" id="tiers">
+      <div class="card-head"><h2>Customer value tiers</h2><button class="linkbtn" data-table-toggle="tiers">Show table</button></div>
+      <p class="sub" style="margin-bottom:6px">Share of customers compared with share of net revenue. Counts and totals only.</p>
+      <div class="legend"><span><i class="dot" style="background:var(--s1);border-radius:2px"></i>Share of customers</span><span><i class="dot" style="background:var(--s2);border-radius:2px"></i>Share of net revenue</span></div>
+      <div class="chart" id="chart-tiers"></div>
+      <div class="tbl-wrap hidden" data-table-for="tiers"></div>
+    </div>
+    <div class="card" id="discount-returns">
+      <div class="card-head"><h2>Return rate by discount depth</h2><button class="linkbtn" data-table-toggle="discount-returns">Show table</button></div>
+      <p class="sub" style="margin-bottom:6px">Discount as a share of unit price. Deeper discounts are returned just as often.</p>
+      <div class="chart" id="chart-disc"></div>
+      <div class="tbl-wrap hidden" data-table-for="discount-returns"></div>
+    </div>
+  </section>
+
+  <section class="card" id="exceptions">
+    <div class="card-head"><h2>Exceptions</h2><span class="sub" id="exc-count"></span></div>
+    <div class="tbl-wrap" id="exc-table"></div>
+  </section>
+
+  <section id="insights-section" style="display:flex;flex-direction:column;gap:12px">
+    <div class="card-head" style="margin:0"><h2>Insights</h2><span class="sub">Each cites figures from the analysis files</span></div>
+    <div class="insights" id="insights"></div>
+    <div class="caveat" id="caveats"></div>
+  </section>
+
+  <section id="chat-panel"></section>
+
+  <footer class="card" id="data-quality">
+    <div class="card-head"><h2>Data quality and source</h2><span class="sub">Snapshot. To regenerate, re-run Agents 2 to 4.</span></div>
+    <div class="dq" id="dq" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;font-size:12.5px;color:var(--ink-2)"></div>
+  </footer>
+</div>
+<div class="tooltip" id="tip" role="status" aria-live="polite"></div>
+
+<template id="chat-template"><style>
+.chat{display:flex;flex-direction:column;gap:12px}
+.chat-log{display:flex;flex-direction:column;gap:10px;max-height:460px;overflow-y:auto;padding:4px 2px}
+.msg{max-width:min(720px,92%);padding:10px 13px;border-radius:12px;font-size:14px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+.msg.bot{align-self:flex-start;background:color-mix(in srgb,var(--accent) 7%,var(--surface));border:1px solid var(--ring);border-bottom-left-radius:4px}
+.msg.bot .src{display:block;margin-top:6px;font-size:11.5px;color:var(--muted)}
+.msg.err{border-color:var(--critical)}
+.chat-sugg{display:flex;flex-wrap:wrap;gap:8px}
+.chat-sugg button{font:inherit;font-size:12.5px;border:1px solid var(--axis);background:var(--surface);color:var(--ink-2);border-radius:999px;padding:5px 12px;cursor:pointer}
+.chat-sugg button:hover{color:var(--ink);border-color:var(--accent)}
+.chat-form{display:flex;gap:8px}
+.chat-form input{flex:1;min-width:0;font:inherit;font-size:14px;padding:9px 12px;border-radius:8px;border:1px solid var(--axis);background:var(--surface);color:var(--ink)}
+.chat-form input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.chat-form button{font:inherit;font-size:14px;font-weight:600;border:0;border-radius:8px;padding:9px 16px;background:var(--accent);color:#fff;cursor:pointer}
+.chat-form button:disabled{opacity:.55;cursor:default}
+.chat-mode{font-size:12px;color:var(--muted)}
+.ask-fab{position:fixed;right:18px;bottom:18px;z-index:15;font:inherit;font-size:14px;font-weight:600;border:0;border-radius:999px;padding:10px 16px;background:var(--accent);color:#fff;box-shadow:0 6px 18px rgba(0,0,0,.18);cursor:pointer}
+.ask-fab:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+</style>
+<div class="card chat" id="chat-card">
+  <div class="card-head" style="margin:0"><h2>Ask the data</h2><span class="chat-mode" id="chat-mode">Answers come from this dashboard's figures only</span></div>
+  <div class="chat-sugg" id="chat-sugg" aria-label="Suggested questions"></div>
+  <div class="chat-log" id="chat-log" aria-live="polite"></div>
+  <form class="chat-form" id="chat-form" autocomplete="off">
+    <input id="chat-input" type="text" placeholder="e.g. Which category has the highest return rate?" aria-label="Ask a question about the data" maxlength="500">
+    <button id="chat-send" type="submit">Ask</button>
+  </form>
+</div>
+</template>
+<script type="application/json" id="dashboard-data">{"generated_at":"2026-11-13T21:42:00-05:00","source":"outputs/03_analysis/*.json, insights.md (Agent 3)","kpis":{"kpis":{"gross_revenue":2311021.05,"discount_amount":595427.08,"net_sales":1715593.97,"returned_value":848112.48,"net_revenue":867481.49,"orders":3000,"units":9073,"kept_orders":1492,"aov_net_sales":571.86,"aov_kept":581.42,"avg_units_per_order":3.02,"avg_unit_price":253.65,"discount_pct_of_gross":25.8,"avg_discount_per_unit":64.64,"return_rate_orders_pct":50.3,"return_rate_value_pct":49.4,"active_customers":954,"total_customers":1000,"net_sales_per_customer":1798.32,"net_revenue_per_customer":909.31,"orders_per_customer":3.14,"repeat_customers":808,"repeat_rate_pct":84.7,"max_orders_per_customer":10,"date_min":"2021-03-25","date_max":"2023-03-25","months":25,"share_of_customers_active_pct":95.4,"inactive_customers":46},"headline_tiles":[{"key":"net_revenue","label":"Net revenue (after returns)","value":867481.49},{"key":"net_sales","label":"Net sales (before returns)","value":1715593.97},{"key":"orders","label":"Orders","value":3000},{"key":"aov_net_sales","label":"Average order value","value":571.86},{"key":"active_customers","label":"Active customers","value":954},{"key":"return_rate_orders_pct","label":"Return rate","value":50.3,"unit":"%"},{"key":"discount_pct_of_gross","label":"Discount % of gross","value":25.8,"unit":"%"},{"key":"repeat_rate_pct","label":"Repeat-customer rate","value":84.7,"unit":"%"}]},"trends":{"monthly":[{"partial":true,"days":6,"net_sales":12923.73,"net_revenue":5022.15,"orders":21,"units":69,"aov":615.42,"return_rate_pct":61.9,"active_customers":21,"mom_net_revenue_pct":null,"mom_net_sales_pct":null,"month":"2021-03"},{"partial":false,"days":29,"net_sales":72711.94,"net_revenue":32045.57,"orders":106,"units":332,"aov":685.96,"return_rate_pct":51.9,"active_customers":99,"mom_net_revenue_pct":538.1,"mom_net_sales_pct":462.6,"month":"2021-04"},{"partial":false,"days":31,"net_sales":84322.82,"net_revenue":47075.83,"orders":142,"units":413,"aov":593.82,"return_rate_pct":47.9,"active_customers":134,"mom_net_revenue_pct":46.9,"mom_net_sales_pct":16,"month":"2021-05"},{"partial":false,"days":27,"net_sales":77694.63,"net_revenue":44374.56,"orders":130,"units":415,"aov":597.65,"return_rate_pct":49.2,"active_customers":123,"mom_net_revenue_pct":-5.7,"mom_net_sales_pct":-7.9,"month":"2021-06"},{"partial":false,"days":31,"net_sales":77135.99,"net_revenue":41922.42,"orders":137,"units":400,"aov":563.04,"return_rate_pct":42.3,"active_customers":130,"mom_net_revenue_pct":-5.5,"mom_net_sales_pct":-0.7,"month":"2021-07"},{"partial":false,"days":30,"net_sales":45761.78,"net_revenue":23240.61,"orders":95,"units":272,"aov":481.7,"return_rate_pct":50.5,"active_customers":93,"mom_net_revenue_pct":-44.6,"mom_net_sales_pct":-40.7,"month":"2021-08"},{"partial":false,"days":30,"net_sales":72664.1,"net_revenue":39323.17,"orders":129,"units":371,"aov":563.29,"return_rate_pct":47.3,"active_customers":120,"mom_net_revenue_pct":69.2,"mom_net_sales_pct":58.8,"month":"2021-09"},{"partial":false,"days":31,"net_sales":75720.53,"net_revenue":36391.36,"orders":131,"units":387,"aov":578.02,"return_rate_pct":48.9,"active_customers":118,"mom_net_revenue_pct":-7.5,"mom_net_sales_pct":4.2,"month":"2021-10"},{"partial":false,"days":30,"net_sales":73440,"net_revenue":38539.07,"orders":128,"units":389,"aov":573.75,"return_rate_pct":51.6,"active_customers":118,"mom_net_revenue_pct":5.9,"mom_net_sales_pct":-3,"month":"2021-11"},{"partial":false,"days":29,"net_sales":76329.28,"net_revenue":41082.87,"orders":128,"units":411,"aov":596.32,"return_rate_pct":46.9,"active_customers":124,"mom_net_revenue_pct":6.6,"mom_net_sales_pct":3.9,"month":"2021-12"},{"partial":false,"days":29,"net_sales":60476.02,"net_revenue":25831.32,"orders":123,"units":363,"aov":491.67,"return_rate_pct":55.3,"active_customers":115,"mom_net_revenue_pct":-37.1,"mom_net_sales_pct":-20.8,"month":"2022-01"},{"partial":false,"days":28,"net_sales":73832.51,"net_revenue":38829.29,"orders":123,"units":368,"aov":600.26,"return_rate_pct":49.6,"active_customers":116,"mom_net_revenue_pct":50.3,"mom_net_sales_pct":22.1,"month":"2022-02"},{"partial":false,"days":31,"net_sales":82699.79,"net_revenue":31009.6,"orders":148,"units":449,"aov":558.78,"return_rate_pct":59.5,"active_customers":137,"mom_net_revenue_pct":-20.1,"mom_net_sales_pct":12,"month":"2022-03"},{"partial":false,"days":30,"net_sales":58505.08,"net_revenue":26846.28,"orders":106,"units":308,"aov":551.93,"return_rate_pct":52.8,"active_customers":100,"mom_net_revenue_pct":-13.4,"mom_net_sales_pct":-29.3,"month":"2022-04"},{"partial":false,"days":30,"net_sales":75903.95,"net_revenue":32365.36,"orders":136,"units":412,"aov":558.12,"return_rate_pct":58.8,"active_customers":125,"mom_net_revenue_pct":20.6,"mom_net_sales_pct":29.7,"month":"2022-05"},{"partial":false,"days":30,"net_sales":65560.5,"net_revenue":36528.41,"orders":114,"units":317,"aov":575.09,"return_rate_pct":50.9,"active_customers":109,"mom_net_revenue_pct":12.9,"mom_net_sales_pct":-13.6,"month":"2022-06"},{"partial":false,"days":31,"net_sales":71891.99,"net_revenue":36484.82,"orders":130,"units":401,"aov":553.02,"return_rate_pct":49.2,"active_customers":119,"mom_net_revenue_pct":-0.1,"mom_net_sales_pct":9.7,"month":"2022-07"},{"partial":false,"days":31,"net_sales":78994.93,"net_revenue":44134.27,"orders":149,"units":450,"aov":530.17,"return_rate_pct":43,"active_customers":140,"mom_net_revenue_pct":21,"mom_net_sales_pct":9.9,"month":"2022-08"},{"partial":false,"days":30,"net_sales":71885.65,"net_revenue":32204.59,"orders":122,"units":377,"aov":589.23,"return_rate_pct":58.2,"active_customers":118,"mom_net_revenue_pct":-27,"mom_net_sales_pct":-9,"month":"2022-09"},{"partial":false,"days":31,"net_sales":72856.75,"net_revenue":36885.45,"orders":128,"units":364,"aov":569.19,"return_rate_pct":43.8,"active_customers":122,"mom_net_revenue_pct":14.5,"mom_net_sales_pct":1.4,"month":"2022-10"},{"partial":false,"days":30,"net_sales":79026.23,"net_revenue":44552.12,"orders":133,"units":422,"aov":594.18,"return_rate_pct":44.4,"active_customers":122,"mom_net_revenue_pct":20.8,"mom_net_sales_pct":8.5,"month":"2022-11"},{"partial":false,"days":31,"net_sales":67442.48,"net_revenue":35973.99,"orders":121,"units":368,"aov":557.38,"return_rate_pct":52.9,"active_customers":109,"mom_net_revenue_pct":-19.3,"mom_net_sales_pct":-14.7,"month":"2022-12"},{"partial":false,"days":31,"net_sales":74729.85,"net_revenue":37175.16,"orders":129,"units":397,"aov":579.3,"return_rate_pct":51.2,"active_customers":123,"mom_net_revenue_pct":3.3,"mom_net_sales_pct":10.8,"month":"2023-01"},{"partial":false,"days":28,"net_sales":56963.23,"net_revenue":26584.12,"orders":102,"units":337,"aov":558.46,"return_rate_pct":52,"active_customers":97,"mom_net_revenue_pct":-28.5,"mom_net_sales_pct":-23.8,"month":"2023-02"},{"partial":true,"days":25,"net_sales":56120.21,"net_revenue":33059.1,"orders":89,"units":281,"aov":630.56,"return_rate_pct":48.3,"active_customers":86,"mom_net_revenue_pct":24.4,"mom_net_sales_pct":-1.5,"month":"2023-03"}],"summary":{"full_months":23,"partial_months":["2021-03","2023-03"],"best_full_month":{"month":"2021-05","net_revenue":47075.83},"worst_full_month":{"month":"2021-08","net_revenue":23240.61},"mean_net_revenue":36060.88,"stddev_net_revenue":6495.02,"mean_net_sales":71589.13,"stddev_net_sales":8978.96,"mean_orders":125.7,"yoy_11m":{"window":"Apr-Feb (11 full months) vs prior year","current":"2022-04..2023-02","prior":"2021-04..2022-02","net_sales_current":773760.64,"net_sales_prior":790089.6,"net_sales_change_pct":-2.1,"net_revenue_current":389734.57,"net_revenue_prior":408656.07,"net_revenue_change_pct":-4.6}},"day_of_week":[{"day_of_week":1,"orders":409,"net_sales":219771.94,"net_revenue":107201.85,"return_rate_pct":52.6,"day":"Mon"},{"day_of_week":2,"orders":420,"net_sales":232305.18,"net_revenue":116207.3,"return_rate_pct":50.2,"day":"Tue"},{"day_of_week":3,"orders":432,"net_sales":252591.68,"net_revenue":126185.24,"return_rate_pct":50.7,"day":"Wed"},{"day_of_week":4,"orders":422,"net_sales":252862.33,"net_revenue":134201.37,"return_rate_pct":48.1,"day":"Thu"},{"day_of_week":5,"orders":432,"net_sales":242043.58,"net_revenue":134920.84,"return_rate_pct":47,"day":"Fri"},{"day_of_week":6,"orders":461,"net_sales":255442.85,"net_revenue":118363.34,"return_rate_pct":52.1,"day":"Sat"},{"day_of_week":7,"orders":424,"net_sales":260576.41,"net_revenue":130401.55,"return_rate_pct":51.2,"day":"Sun"}],"yearly":[{"purchase_year":2021,"first_date":"2021-03-25","last_date":"2021-12-31","orders":1147,"net_sales":668704.8,"net_revenue":349017.61},{"purchase_year":2022,"first_date":"2022-01-01","last_date":"2022-12-31","orders":1533,"net_sales":859075.88,"net_revenue":421645.5},{"purchase_year":2023,"first_date":"2023-01-01","last_date":"2023-03-25","orders":320,"net_sales":187813.29,"net_revenue":96818.38}]},"segments":{"product_category":[{"value":"Automotive","orders":520,"customers":410,"units":1585,"net_sales":304958.14,"net_revenue":157353.02,"aov":586.46,"share_net_revenue_pct":18.1,"share_net_sales_pct":17.8,"return_rate_pct":48.3,"discount_pct":24.7},{"value":"Toys","orders":509,"customers":401,"units":1571,"net_sales":301137.7,"net_revenue":157272.53,"aov":591.63,"share_net_revenue_pct":18.1,"share_net_sales_pct":17.6,"return_rate_pct":48.7,"discount_pct":26.7},{"value":"Home","orders":487,"customers":391,"units":1495,"net_sales":282359.82,"net_revenue":145331.2,"aov":579.79,"share_net_revenue_pct":16.8,"share_net_sales_pct":16.5,"return_rate_pct":50.7,"discount_pct":26},{"value":"Electronics","orders":502,"customers":401,"units":1518,"net_sales":284856.36,"net_revenue":144107.39,"aov":567.44,"share_net_revenue_pct":16.6,"share_net_sales_pct":16.6,"return_rate_pct":50.2,"discount_pct":25.5},{"value":"Fashion","orders":508,"customers":403,"units":1498,"net_sales":280955.44,"net_revenue":140548.85,"aov":553.06,"share_net_revenue_pct":16.2,"share_net_sales_pct":16.4,"return_rate_pct":51.2,"discount_pct":26},{"value":"Books","orders":474,"customers":386,"units":1406,"net_sales":261326.51,"net_revenue":122868.5,"aov":551.32,"share_net_revenue_pct":14.2,"share_net_sales_pct":15.2,"return_rate_pct":52.7,"discount_pct":25.7}],"purchase_channel":[{"value":"In-store","orders":1526,"customers":787,"units":4634,"net_sales":886841.37,"net_revenue":446482.09,"aov":581.15,"share_net_revenue_pct":51.5,"share_net_sales_pct":51.7,"return_rate_pct":50.2,"discount_pct":25.7},{"value":"Online","orders":1474,"customers":791,"units":4439,"net_sales":828752.6,"net_revenue":420999.4,"aov":562.25,"share_net_revenue_pct":48.5,"share_net_sales_pct":48.3,"return_rate_pct":50.3,"discount_pct":25.9}],"mode_of_payment":[{"value":"Credit Card","orders":616,"customers":459,"units":1889,"net_sales":366443.02,"net_revenue":189330.11,"aov":594.88,"share_net_revenue_pct":21.8,"share_net_sales_pct":21.4,"return_rate_pct":49.7,"discount_pct":26.6},{"value":"Cash","orders":582,"customers":440,"units":1738,"net_sales":322873.32,"net_revenue":176299.37,"aov":554.77,"share_net_revenue_pct":20.3,"share_net_sales_pct":18.8,"return_rate_pct":48.3,"discount_pct":25.5},{"value":"Debit Card","orders":595,"customers":453,"units":1785,"net_sales":339426.08,"net_revenue":169065.6,"aov":570.46,"share_net_revenue_pct":19.5,"share_net_sales_pct":19.8,"return_rate_pct":51.3,"discount_pct":25.4},{"value":"UPI","orders":608,"customers":452,"units":1878,"net_sales":355891.92,"net_revenue":166764.71,"aov":585.35,"share_net_revenue_pct":19.2,"share_net_sales_pct":20.7,"return_rate_pct":52.3,"discount_pct":24.8},{"value":"Net Banking","orders":599,"customers":442,"units":1783,"net_sales":330959.63,"net_revenue":166021.7,"aov":552.52,"share_net_revenue_pct":19.1,"share_net_sales_pct":19.3,"return_rate_pct":49.7,"discount_pct":26.4}],"age_band":[{"value":"55+","orders":696,"customers":222,"units":2028,"net_sales":390162.36,"net_revenue":199993.99,"aov":560.58,"share_net_revenue_pct":23.1,"share_net_sales_pct":22.7,"return_rate_pct":50,"discount_pct":23.8},{"value":"25-34","orders":639,"customers":199,"units":1970,"net_sales":378088.19,"net_revenue":192412.03,"aov":591.69,"share_net_revenue_pct":22.2,"share_net_sales_pct":22,"return_rate_pct":48,"discount_pct":26.1},{"value":"35-44","orders":631,"customers":187,"units":1932,"net_sales":363230.22,"net_revenue":186202.38,"aov":575.64,"share_net_revenue_pct":21.5,"share_net_sales_pct":21.2,"return_rate_pct":51.2,"discount_pct":25.6},{"value":"45-54","orders":638,"customers":213,"units":1920,"net_sales":345839.37,"net_revenue":175668.27,"aov":542.07,"share_net_revenue_pct":20.3,"share_net_sales_pct":20.2,"return_rate_pct":50.3,"discount_pct":27.1},{"value":"<25","orders":396,"customers":133,"units":1223,"net_sales":238273.83,"net_revenue":113204.82,"aov":601.7,"share_net_revenue_pct":13,"share_net_sales_pct":13.9,"return_rate_pct":52.8,"discount_pct":26.6}],"gender":[{"value":"Other","orders":996,"customers":317,"units":2969,"net_sales":574596.27,"net_revenue":300874.46,"aov":576.9,"share_net_revenue_pct":34.7,"share_net_sales_pct":33.5,"return_rate_pct":48.5,"discount_pct":25.1},{"value":"Male","orders":975,"customers":308,"units":2959,"net_sales":557864.76,"net_revenue":293105.62,"aov":572.17,"share_net_revenue_pct":33.8,"share_net_sales_pct":32.5,"return_rate_pct":49.9,"discount_pct":25.9},{"value":"Female","orders":1029,"customers":329,"units":3145,"net_sales":583132.94,"net_revenue":273501.41,"aov":566.7,"share_net_revenue_pct":31.5,"share_net_sales_pct":34,"return_rate_pct":52.3,"discount_pct":26.3}],"location":[{"value":"Pune","orders":346,"customers":113,"units":1025,"net_sales":204083.52,"net_revenue":105185.12,"aov":589.84,"share_net_revenue_pct":12.1,"share_net_sales_pct":11.9,"return_rate_pct":51.2,"discount_pct":24.6},{"value":"Mumbai","orders":316,"customers":98,"units":961,"net_sales":180977.19,"net_revenue":96677.15,"aov":572.71,"share_net_revenue_pct":11.1,"share_net_sales_pct":10.5,"return_rate_pct":48.4,"discount_pct":25.5},{"value":"Hyderabad","orders":328,"customers":108,"units":1002,"net_sales":182369.7,"net_revenue":94381.99,"aov":556.01,"share_net_revenue_pct":10.9,"share_net_sales_pct":10.6,"return_rate_pct":50,"discount_pct":26.5},{"value":"Bangalore","orders":305,"customers":104,"units":961,"net_sales":181666.63,"net_revenue":90314.71,"aov":595.63,"share_net_revenue_pct":10.4,"share_net_sales_pct":10.6,"return_rate_pct":50.2,"discount_pct":25.2},{"value":"Surat","orders":305,"customers":94,"units":906,"net_sales":166757.13,"net_revenue":89988.79,"aov":546.74,"share_net_revenue_pct":10.4,"share_net_sales_pct":9.7,"return_rate_pct":46.9,"discount_pct":26},{"value":"Chennai","orders":294,"customers":86,"units":847,"net_sales":168810.81,"net_revenue":85098.72,"aov":574.19,"share_net_revenue_pct":9.8,"share_net_sales_pct":9.8,"return_rate_pct":48.6,"discount_pct":26.3},{"value":"Jaipur","orders":301,"customers":91,"units":933,"net_sales":177234.56,"net_revenue":84008.34,"aov":588.82,"share_net_revenue_pct":9.7,"share_net_sales_pct":10.3,"return_rate_pct":50.8,"discount_pct":26.6},{"value":"Delhi","orders":285,"customers":92,"units":871,"net_sales":159013.28,"net_revenue":77186.39,"aov":557.94,"share_net_revenue_pct":8.9,"share_net_sales_pct":9.3,"return_rate_pct":51.9,"discount_pct":27.4},{"value":"Kolkata","orders":276,"customers":87,"units":821,"net_sales":154977.25,"net_revenue":75197.3,"aov":561.51,"share_net_revenue_pct":8.7,"share_net_sales_pct":9,"return_rate_pct":53.3,"discount_pct":24},{"value":"Ahmedabad","orders":244,"customers":81,"units":746,"net_sales":139703.9,"net_revenue":69442.98,"aov":572.56,"share_net_revenue_pct":8,"share_net_sales_pct":8.1,"return_rate_pct":52,"discount_pct":25.6}],"category_x_channel":[{"value":"Automotive | In-store","orders":269,"customers":242,"units":817,"net_sales":162511.66,"net_revenue":86765,"aov":604.13,"share_net_revenue_pct":10,"share_net_sales_pct":9.5,"return_rate_pct":46.8,"discount_pct":24.8},{"value":"Toys | Online","orders":252,"customers":224,"units":793,"net_sales":154313.09,"net_revenue":81853.79,"aov":612.35,"share_net_revenue_pct":9.4,"share_net_sales_pct":9,"return_rate_pct":48.8,"discount_pct":26.4},{"value":"Home | In-store","orders":258,"customers":230,"units":795,"net_sales":154373.62,"net_revenue":81315.24,"aov":598.35,"share_net_revenue_pct":9.4,"share_net_sales_pct":9,"return_rate_pct":49.6,"discount_pct":25.4},{"value":"Fashion | Online","orders":272,"customers":242,"units":792,"net_sales":146830.31,"net_revenue":80963.73,"aov":539.82,"share_net_revenue_pct":9.3,"share_net_sales_pct":8.6,"return_rate_pct":48.2,"discount_pct":26.1},{"value":"Electronics | In-store","orders":248,"customers":227,"units":773,"net_sales":143186.95,"net_revenue":76730.22,"aov":577.37,"share_net_revenue_pct":8.8,"share_net_sales_pct":8.3,"return_rate_pct":47.6,"discount_pct":25.5},{"value":"Toys | In-store","orders":257,"customers":229,"units":778,"net_sales":146824.61,"net_revenue":75418.74,"aov":571.3,"share_net_revenue_pct":8.7,"share_net_sales_pct":8.6,"return_rate_pct":48.6,"discount_pct":26.9},{"value":"Automotive | Online","orders":251,"customers":223,"units":768,"net_sales":142446.48,"net_revenue":70588.02,"aov":567.52,"share_net_revenue_pct":8.1,"share_net_sales_pct":8.3,"return_rate_pct":49.8,"discount_pct":24.6},{"value":"Electronics | Online","orders":254,"customers":223,"units":745,"net_sales":141669.41,"net_revenue":67377.17,"aov":557.75,"share_net_revenue_pct":7.8,"share_net_sales_pct":8.3,"return_rate_pct":52.8,"discount_pct":25.4},{"value":"Books | In-store","orders":258,"customers":231,"units":765,"net_sales":145819.4,"net_revenue":66667.77,"aov":565.19,"share_net_revenue_pct":7.7,"share_net_sales_pct":8.5,"return_rate_pct":54.3,"discount_pct":25.7},{"value":"Home | Online","orders":229,"customers":208,"units":700,"net_sales":127986.2,"net_revenue":64015.96,"aov":558.89,"share_net_revenue_pct":7.4,"share_net_sales_pct":7.5,"return_rate_pct":52,"discount_pct":26.8},{"value":"Fashion | In-store","orders":236,"customers":210,"units":706,"net_sales":134125.13,"net_revenue":59585.12,"aov":568.33,"share_net_revenue_pct":6.9,"share_net_sales_pct":7.8,"return_rate_pct":54.7,"discount_pct":25.8},{"value":"Books | Online","orders":216,"customers":202,"units":641,"net_sales":115507.11,"net_revenue":56200.73,"aov":534.76,"share_net_revenue_pct":6.5,"share_net_sales_pct":6.7,"return_rate_pct":50.9,"discount_pct":25.8}],"age_band_x_category":[{"value":"55+ | Automotive","orders":154,"customers":116,"units":451,"net_sales":88782.55,"net_revenue":47165.07,"aov":576.51,"share_net_revenue_pct":5.4,"share_net_sales_pct":5.2,"return_rate_pct":46.8,"discount_pct":22.7},{"value":"25-34 | Toys","orders":96,"customers":80,"units":310,"net_sales":66495.29,"net_revenue":39027.45,"aov":692.66,"share_net_revenue_pct":4.5,"share_net_sales_pct":3.9,"return_rate_pct":41.7,"discount_pct":25.3},{"value":"45-54 | Electronics","orders":110,"customers":92,"units":334,"net_sales":61967.91,"net_revenue":37140.09,"aov":563.34,"share_net_revenue_pct":4.3,"share_net_sales_pct":3.6,"return_rate_pct":44.5,"discount_pct":27.6},{"value":"35-44 | Toys","orders":113,"customers":84,"units":365,"net_sales":70866.7,"net_revenue":36565.25,"aov":627.14,"share_net_revenue_pct":4.2,"share_net_sales_pct":4.1,"return_rate_pct":48.7,"discount_pct":29.9},{"value":"35-44 | Fashion","orders":119,"customers":88,"units":377,"net_sales":71022.6,"net_revenue":35430.98,"aov":596.83,"share_net_revenue_pct":4.1,"share_net_sales_pct":4.1,"return_rate_pct":51.3,"discount_pct":24.8},{"value":"45-54 | Home","orders":105,"customers":87,"units":323,"net_sales":62449.28,"net_revenue":34637.1,"aov":594.76,"share_net_revenue_pct":4,"share_net_sales_pct":3.6,"return_rate_pct":48.6,"discount_pct":27},{"value":"55+ | Fashion","orders":120,"customers":94,"units":349,"net_sales":65856.45,"net_revenue":34342.44,"aov":548.8,"share_net_revenue_pct":4,"share_net_sales_pct":3.8,"return_rate_pct":53.3,"discount_pct":23.7},{"value":"25-34 | Electronics","orders":118,"customers":92,"units":340,"net_sales":65753.43,"net_revenue":33480.69,"aov":557.23,"share_net_revenue_pct":3.9,"share_net_sales_pct":3.8,"return_rate_pct":49.2,"discount_pct":24.8},{"value":"45-54 | Toys","orders":125,"customers":100,"units":374,"net_sales":65988.2,"net_revenue":32503.09,"aov":527.91,"share_net_revenue_pct":3.7,"share_net_sales_pct":3.8,"return_rate_pct":52.8,"discount_pct":26.3},{"value":"25-34 | Books","orders":116,"customers":87,"units":343,"net_sales":63498.45,"net_revenue":32238.29,"aov":547.4,"share_net_revenue_pct":3.7,"share_net_sales_pct":3.7,"return_rate_pct":45.7,"discount_pct":26.7},{"value":"25-34 | Home","orders":112,"customers":88,"units":367,"net_sales":64637.01,"net_revenue":31473.17,"aov":577.12,"share_net_revenue_pct":3.6,"share_net_sales_pct":3.8,"return_rate_pct":53.6,"discount_pct":25.8},{"value":"55+ | Home","orders":103,"customers":81,"units":299,"net_sales":59000.87,"net_revenue":31118.54,"aov":572.82,"share_net_revenue_pct":3.6,"share_net_sales_pct":3.4,"return_rate_pct":46.6,"discount_pct":25.2},{"value":"55+ | Toys","orders":106,"customers":85,"units":312,"net_sales":58191.73,"net_revenue":30725.61,"aov":548.98,"share_net_revenue_pct":3.5,"share_net_sales_pct":3.4,"return_rate_pct":46.2,"discount_pct":23.5},{"value":"35-44 | Books","orders":97,"customers":78,"units":292,"net_sales":56444.46,"net_revenue":30203.08,"aov":581.9,"share_net_revenue_pct":3.5,"share_net_sales_pct":3.3,"return_rate_pct":56.7,"discount_pct":24.3},{"value":"35-44 | Home","orders":106,"customers":85,"units":308,"net_sales":57677.91,"net_revenue":29311.65,"aov":544.13,"share_net_revenue_pct":3.4,"share_net_sales_pct":3.4,"return_rate_pct":50.9,"discount_pct":26.3},{"value":"<25 | Automotive","orders":78,"customers":61,"units":261,"net_sales":49703.22,"net_revenue":28616.78,"aov":637.22,"share_net_revenue_pct":3.3,"share_net_sales_pct":2.9,"return_rate_pct":48.7,"discount_pct":25.5},{"value":"25-34 | Fashion","orders":97,"customers":75,"units":295,"net_sales":58298.82,"net_revenue":28540.51,"aov":601.02,"share_net_revenue_pct":3.3,"share_net_sales_pct":3.4,"return_rate_pct":47.4,"discount_pct":26.3},{"value":"55+ | Electronics","orders":105,"customers":81,"units":315,"net_sales":58449.41,"net_revenue":28529.66,"aov":556.66,"share_net_revenue_pct":3.3,"share_net_sales_pct":3.4,"return_rate_pct":52.4,"discount_pct":24.5},{"value":"35-44 | Automotive","orders":92,"customers":71,"units":271,"net_sales":52971.51,"net_revenue":28496.74,"aov":575.78,"share_net_revenue_pct":3.3,"share_net_sales_pct":3.1,"return_rate_pct":44.6,"discount_pct":22.4},{"value":"55+ | Books","orders":108,"customers":89,"units":302,"net_sales":59881.35,"net_revenue":28112.67,"aov":554.46,"share_net_revenue_pct":3.2,"share_net_sales_pct":3.5,"return_rate_pct":55.6,"discount_pct":24},{"value":"45-54 | Fashion","orders":109,"customers":94,"units":304,"net_sales":53530.3,"net_revenue":28047.77,"aov":491.1,"share_net_revenue_pct":3.2,"share_net_sales_pct":3.1,"return_rate_pct":50.5,"discount_pct":28.4},{"value":"25-34 | Automotive","orders":100,"customers":81,"units":315,"net_sales":59405.19,"net_revenue":27651.92,"aov":594.05,"share_net_revenue_pct":3.2,"share_net_sales_pct":3.5,"return_rate_pct":50,"discount_pct":27.9},{"value":"35-44 | Electronics","orders":104,"customers":82,"units":319,"net_sales":54247.04,"net_revenue":26194.68,"aov":521.61,"share_net_revenue_pct":3,"share_net_sales_pct":3.2,"return_rate_pct":54.8,"discount_pct":24.3},{"value":"45-54 | Automotive","orders":96,"customers":81,"units":287,"net_sales":54095.67,"net_revenue":25422.51,"aov":563.5,"share_net_revenue_pct":2.9,"share_net_sales_pct":3.2,"return_rate_pct":52.1,"discount_pct":25.9},{"value":"<25 | Home","orders":61,"customers":50,"units":198,"net_sales":38594.75,"net_revenue":18790.74,"aov":632.7,"share_net_revenue_pct":2.2,"share_net_sales_pct":2.2,"return_rate_pct":55.7,"discount_pct":25.8},{"value":"<25 | Electronics","orders":65,"customers":54,"units":210,"net_sales":44438.57,"net_revenue":18762.27,"aov":683.67,"share_net_revenue_pct":2.2,"share_net_sales_pct":2.6,"return_rate_pct":50.8,"discount_pct":26.2},{"value":"<25 | Toys","orders":69,"customers":52,"units":210,"net_sales":39595.78,"net_revenue":18451.13,"aov":573.85,"share_net_revenue_pct":2.1,"share_net_sales_pct":2.3,"return_rate_pct":55.1,"discount_pct":27.8},{"value":"45-54 | Books","orders":93,"customers":81,"units":298,"net_sales":47808.01,"net_revenue":17917.71,"aov":514.06,"share_net_revenue_pct":2.1,"share_net_sales_pct":2.8,"return_rate_pct":53.8,"discount_pct":27.3},{"value":"<25 | Books","orders":60,"customers":51,"units":171,"net_sales":33694.24,"net_revenue":14396.75,"aov":561.57,"share_net_revenue_pct":1.7,"share_net_sales_pct":2,"return_rate_pct":53.3,"discount_pct":26.6},{"value":"<25 | Fashion","orders":63,"customers":52,"units":173,"net_sales":32247.27,"net_revenue":14187.15,"aov":511.86,"share_net_revenue_pct":1.6,"share_net_sales_pct":1.9,"return_rate_pct":54,"discount_pct":28.2}],"top10_products":[{"value":"Laptop","orders":121,"customers":115,"units":378,"net_sales":69981.56,"net_revenue":40053.75,"aov":578.36,"share_net_revenue_pct":4.6,"share_net_sales_pct":4.1,"return_rate_pct":43,"discount_pct":25.1},{"value":"Car Charger","orders":92,"customers":87,"units":277,"net_sales":59878.93,"net_revenue":39380.85,"aov":650.86,"share_net_revenue_pct":4.5,"share_net_sales_pct":3.5,"return_rate_pct":33.7,"discount_pct":21.7},{"value":"Motor Oil","orders":125,"customers":118,"units":408,"net_sales":72305.65,"net_revenue":38255.56,"aov":578.45,"share_net_revenue_pct":4.4,"share_net_sales_pct":4.2,"return_rate_pct":47.2,"discount_pct":27.3},{"value":"Jeans","orders":113,"customers":109,"units":332,"net_sales":64956.78,"net_revenue":36842.34,"aov":574.84,"share_net_revenue_pct":4.2,"share_net_sales_pct":3.8,"return_rate_pct":46.9,"discount_pct":25.9},{"value":"Doll","orders":103,"customers":97,"units":316,"net_sales":62081.2,"net_revenue":36025.69,"aov":602.73,"share_net_revenue_pct":4.2,"share_net_sales_pct":3.6,"return_rate_pct":48.5,"discount_pct":28},{"value":"Board Game","orders":110,"customers":107,"units":364,"net_sales":64940.93,"net_revenue":35150.02,"aov":590.37,"share_net_revenue_pct":4.1,"share_net_sales_pct":3.8,"return_rate_pct":47.3,"discount_pct":26.8},{"value":"Headphones","orders":103,"customers":98,"units":324,"net_sales":65294.53,"net_revenue":32681.42,"aov":633.93,"share_net_revenue_pct":3.8,"share_net_sales_pct":3.8,"return_rate_pct":47.6,"discount_pct":25.1},{"value":"Bed Sheets","orders":111,"customers":105,"units":331,"net_sales":67192.56,"net_revenue":32665.97,"aov":605.34,"share_net_revenue_pct":3.8,"share_net_sales_pct":3.9,"return_rate_pct":52.3,"discount_pct":24.4},{"value":"Dress","orders":105,"customers":101,"units":307,"net_sales":62794.6,"net_revenue":32509.64,"aov":598.04,"share_net_revenue_pct":3.7,"share_net_sales_pct":3.7,"return_rate_pct":49.5,"discount_pct":24},{"value":"Air Freshener","orders":96,"customers":90,"units":291,"net_sales":55819.57,"net_revenue":32327.43,"aov":581.45,"share_net_revenue_pct":3.7,"share_net_sales_pct":3.3,"return_rate_pct":47.9,"discount_pct":23.3}],"bottom10_products":[{"value":"Table Lamp","orders":98,"customers":91,"units":305,"net_sales":54654.88,"net_revenue":25008.77,"aov":557.7,"share_net_revenue_pct":2.9,"share_net_sales_pct":3.2,"return_rate_pct":54.1,"discount_pct":27.1},{"value":"Camera","orders":89,"customers":85,"units":271,"net_sales":49588.37,"net_revenue":24599.62,"aov":557.17,"share_net_revenue_pct":2.8,"share_net_sales_pct":2.9,"return_rate_pct":55.1,"discount_pct":25.2},{"value":"Science Fiction","orders":106,"customers":98,"units":306,"net_sales":53410.56,"net_revenue":24122.18,"aov":503.87,"share_net_revenue_pct":2.8,"share_net_sales_pct":3.1,"return_rate_pct":53.8,"discount_pct":25.4},{"value":"Smartwatch","orders":100,"customers":94,"units":289,"net_sales":53890.7,"net_revenue":23900.42,"aov":538.91,"share_net_revenue_pct":2.8,"share_net_sales_pct":3.1,"return_rate_pct":55,"discount_pct":26.2},{"value":"Shoes","orders":107,"customers":102,"units":316,"net_sales":53543.36,"net_revenue":23439.07,"aov":500.41,"share_net_revenue_pct":2.7,"share_net_sales_pct":3.1,"return_rate_pct":52.3,"discount_pct":28.9},{"value":"Smartphone","orders":89,"customers":82,"units":256,"net_sales":46101.2,"net_revenue":22872.18,"aov":517.99,"share_net_revenue_pct":2.6,"share_net_sales_pct":2.7,"return_rate_pct":52.8,"discount_pct":25.9},{"value":"Motorcycle Helmet","orders":104,"customers":102,"units":303,"net_sales":54048.55,"net_revenue":20925.16,"aov":519.7,"share_net_revenue_pct":2.4,"share_net_sales_pct":3.2,"return_rate_pct":56.7,"discount_pct":24.9},{"value":"Children's Book","orders":75,"customers":73,"units":231,"net_sales":41113.28,"net_revenue":20767.02,"aov":548.18,"share_net_revenue_pct":2.4,"share_net_sales_pct":2.4,"return_rate_pct":53.3,"discount_pct":25.5},{"value":"T-Shirt","orders":90,"customers":89,"units":256,"net_sales":49262.3,"net_revenue":19957.92,"aov":547.36,"share_net_revenue_pct":2.3,"share_net_sales_pct":2.9,"return_rate_pct":63.3,"discount_pct":23.7},{"value":"Biography","orders":91,"customers":88,"units":244,"net_sales":42046.79,"net_revenue":18331.99,"aov":462.05,"share_net_revenue_pct":2.1,"share_net_sales_pct":2.5,"return_rate_pct":48.4,"discount_pct":25.3}],"all_products":[{"value":"Laptop","orders":121,"customers":115,"units":378,"net_sales":69981.56,"net_revenue":40053.75,"aov":578.36,"share_net_revenue_pct":4.6,"share_net_sales_pct":4.1,"return_rate_pct":43,"discount_pct":25.1},{"value":"Car Charger","orders":92,"customers":87,"units":277,"net_sales":59878.93,"net_revenue":39380.85,"aov":650.86,"share_net_revenue_pct":4.5,"share_net_sales_pct":3.5,"return_rate_pct":33.7,"discount_pct":21.7},{"value":"Motor Oil","orders":125,"customers":118,"units":408,"net_sales":72305.65,"net_revenue":38255.56,"aov":578.45,"share_net_revenue_pct":4.4,"share_net_sales_pct":4.2,"return_rate_pct":47.2,"discount_pct":27.3},{"value":"Jeans","orders":113,"customers":109,"units":332,"net_sales":64956.78,"net_revenue":36842.34,"aov":574.84,"share_net_revenue_pct":4.2,"share_net_sales_pct":3.8,"return_rate_pct":46.9,"discount_pct":25.9},{"value":"Doll","orders":103,"customers":97,"units":316,"net_sales":62081.2,"net_revenue":36025.69,"aov":602.73,"share_net_revenue_pct":4.2,"share_net_sales_pct":3.6,"return_rate_pct":48.5,"discount_pct":28},{"value":"Board Game","orders":110,"customers":107,"units":364,"net_sales":64940.93,"net_revenue":35150.02,"aov":590.37,"share_net_revenue_pct":4.1,"share_net_sales_pct":3.8,"return_rate_pct":47.3,"discount_pct":26.8},{"value":"Headphones","orders":103,"customers":98,"units":324,"net_sales":65294.53,"net_revenue":32681.42,"aov":633.93,"share_net_revenue_pct":3.8,"share_net_sales_pct":3.8,"return_rate_pct":47.6,"discount_pct":25.1},{"value":"Bed Sheets","orders":111,"customers":105,"units":331,"net_sales":67192.56,"net_revenue":32665.97,"aov":605.34,"share_net_revenue_pct":3.8,"share_net_sales_pct":3.9,"return_rate_pct":52.3,"discount_pct":24.4},{"value":"Dress","orders":105,"customers":101,"units":307,"net_sales":62794.6,"net_revenue":32509.64,"aov":598.04,"share_net_revenue_pct":3.7,"share_net_sales_pct":3.7,"return_rate_pct":49.5,"discount_pct":24},{"value":"Air Freshener","orders":96,"customers":90,"units":291,"net_sales":55819.57,"net_revenue":32327.43,"aov":581.45,"share_net_revenue_pct":3.7,"share_net_sales_pct":3.3,"return_rate_pct":47.9,"discount_pct":23.3},{"value":"Textbook","orders":99,"customers":98,"units":317,"net_sales":63572.18,"net_revenue":30706.96,"aov":642.14,"share_net_revenue_pct":3.5,"share_net_sales_pct":3.7,"return_rate_pct":54.5,"discount_pct":25.7},{"value":"Cushion Covers","orders":99,"customers":96,"units":311,"net_sales":60106.42,"net_revenue":30624.56,"aov":607.14,"share_net_revenue_pct":3.5,"share_net_sales_pct":3.5,"return_rate_pct":55.6,"discount_pct":28.1},{"value":"Action Figure","orders":107,"customers":98,"units":345,"net_sales":70514.95,"net_revenue":30169.49,"aov":659.02,"share_net_revenue_pct":3.5,"share_net_sales_pct":4.1,"return_rate_pct":55.1,"discount_pct":26.7},{"value":"Curtains","orders":87,"customers":86,"units":270,"net_sales":50536.62,"net_revenue":29807.74,"aov":580.88,"share_net_revenue_pct":3.4,"share_net_sales_pct":2.9,"return_rate_pct":42.5,"discount_pct":25.6},{"value":"Mystery Novel","orders":103,"customers":95,"units":308,"net_sales":61183.7,"net_revenue":28940.35,"aov":594.02,"share_net_revenue_pct":3.3,"share_net_sales_pct":3.6,"return_rate_pct":53.4,"discount_pct":26.5},{"value":"Puzzle","orders":101,"customers":95,"units":300,"net_sales":56600.57,"net_revenue":28885.26,"aov":560.4,"share_net_revenue_pct":3.3,"share_net_sales_pct":3.3,"return_rate_pct":46.5,"discount_pct":28.2},{"value":"Watch","orders":93,"customers":90,"units":287,"net_sales":50398.4,"net_revenue":27799.88,"aov":541.92,"share_net_revenue_pct":3.2,"share_net_sales_pct":2.9,"return_rate_pct":45.2,"discount_pct":27.3},{"value":"Cookware Set","orders":92,"customers":89,"units":278,"net_sales":49869.34,"net_revenue":27224.16,"aov":542.06,"share_net_revenue_pct":3.1,"share_net_sales_pct":2.9,"return_rate_pct":47.8,"discount_pct":25},{"value":"Remote Control Car","orders":88,"customers":86,"units":246,"net_sales":47000.05,"net_revenue":27042.07,"aov":534.09,"share_net_revenue_pct":3.1,"share_net_sales_pct":2.7,"return_rate_pct":45.5,"discount_pct":22.6},{"value":"Car Seat Cover","orders":103,"customers":97,"units":306,"net_sales":62905.44,"net_revenue":26464.02,"aov":610.73,"share_net_revenue_pct":3.1,"share_net_sales_pct":3.7,"return_rate_pct":54.4,"discount_pct":25.5},{"value":"Table Lamp","orders":98,"customers":91,"units":305,"net_sales":54654.88,"net_revenue":25008.77,"aov":557.7,"share_net_revenue_pct":2.9,"share_net_sales_pct":3.2,"return_rate_pct":54.1,"discount_pct":27.1},{"value":"Camera","orders":89,"customers":85,"units":271,"net_sales":49588.37,"net_revenue":24599.62,"aov":557.17,"share_net_revenue_pct":2.8,"share_net_sales_pct":2.9,"return_rate_pct":55.1,"discount_pct":25.2},{"value":"Science Fiction","orders":106,"customers":98,"units":306,"net_sales":53410.56,"net_revenue":24122.18,"aov":503.87,"share_net_revenue_pct":2.8,"share_net_sales_pct":3.1,"return_rate_pct":53.8,"discount_pct":25.4},{"value":"Smartwatch","orders":100,"customers":94,"units":289,"net_sales":53890.7,"net_revenue":23900.42,"aov":538.91,"share_net_revenue_pct":2.8,"share_net_sales_pct":3.1,"return_rate_pct":55,"discount_pct":26.2},{"value":"Shoes","orders":107,"customers":102,"units":316,"net_sales":53543.36,"net_revenue":23439.07,"aov":500.41,"share_net_revenue_pct":2.7,"share_net_sales_pct":3.1,"return_rate_pct":52.3,"discount_pct":28.9},{"value":"Smartphone","orders":89,"customers":82,"units":256,"net_sales":46101.2,"net_revenue":22872.18,"aov":517.99,"share_net_revenue_pct":2.6,"share_net_sales_pct":2.7,"return_rate_pct":52.8,"discount_pct":25.9},{"value":"Motorcycle Helmet","orders":104,"customers":102,"units":303,"net_sales":54048.55,"net_revenue":20925.16,"aov":519.7,"share_net_revenue_pct":2.4,"share_net_sales_pct":3.2,"return_rate_pct":56.7,"discount_pct":24.9},{"value":"Children's Book","orders":75,"customers":73,"units":231,"net_sales":41113.28,"net_revenue":20767.02,"aov":548.18,"share_net_revenue_pct":2.4,"share_net_sales_pct":2.4,"return_rate_pct":53.3,"discount_pct":25.5},{"value":"T-Shirt","orders":90,"customers":89,"units":256,"net_sales":49262.3,"net_revenue":19957.92,"aov":547.36,"share_net_revenue_pct":2.3,"share_net_sales_pct":2.9,"return_rate_pct":63.3,"discount_pct":23.7},{"value":"Biography","orders":91,"customers":88,"units":244,"net_sales":42046.79,"net_revenue":18331.99,"aov":462.05,"share_net_revenue_pct":2.1,"share_net_sales_pct":2.5,"return_rate_pct":48.4,"discount_pct":25.3}],"customer_value_tiers":{"method":"customers ranked by net revenue (after returns) into deciles: top 1 / next 4 / bottom 5; counts and totals only","tiers":[{"tier":"Top 10%","customers":96,"orders":469,"net_sales":368467.55,"net_revenue":272033.39,"avg_net_revenue_per_customer":2833.68,"avg_orders":4.89,"return_rate_pct":34.1,"share_net_revenue_pct":31.4},{"tier":"Middle 40%","customers":383,"orders":1386,"net_sales":833035.78,"net_revenue":500865.48,"avg_net_revenue_per_customer":1307.74,"avg_orders":3.62,"return_rate_pct":41.8,"share_net_revenue_pct":57.7},{"tier":"Bottom 50%","customers":475,"orders":1145,"net_sales":514090.64,"net_revenue":94582.62,"avg_net_revenue_per_customer":199.12,"avg_orders":2.41,"return_rate_pct":67.1,"share_net_revenue_pct":10.9}],"order_frequency":[{"orders":1,"customers":146},{"orders":2,"customers":234},{"orders":3,"customers":233},{"orders":4,"customers":156},{"orders":5,"customers":100},{"orders":6,"customers":50},{"orders":7,"customers":22},{"orders":8,"customers":9},{"orders":9,"customers":3},{"orders":10,"customers":1}],"customers_all_orders_returned":179,"customers_no_returns":169},"suppression":"No segment has fewer than 5 customers (smallest: 50); nothing suppressed."},"exceptions":{"rules":{"product_high_return_high":"≥1.5× overall (75.4%)","product_high_return_medium":"≥ overall +5 pp","product_low_return":"≤ overall −10 pp","month_outlier":"full months outside mean ±2 SD","transaction_outliers":"net sales <p01 or >p99","high_discount":"discount/price > p95"},"exceptions":[{"type":"month_outlier","dimension":"month","value":"2021-08","metric":"net_sales","observed":45761.78,"benchmark":71589.13,"severity":"high","note":"Outside mean ±2 SD (53631–89547); orders 95 vs mean 125.7"},{"type":"customer_behaviour","dimension":"customers","value":"all orders returned","metric":"customers","observed":179,"benchmark":954,"severity":"high","note":"18.8% of active customers returned every order"},{"type":"return_rate_high","dimension":"product_name","value":"Cushion Covers","metric":"return_rate_pct","observed":55.6,"benchmark":50.3,"severity":"medium","note":"Above overall by 5.3 pp"},{"type":"return_rate_high","dimension":"product_name","value":"Motorcycle Helmet","metric":"return_rate_pct","observed":56.7,"benchmark":50.3,"severity":"medium","note":"Above overall by 6.4 pp"},{"type":"return_rate_high","dimension":"product_name","value":"T-Shirt","metric":"return_rate_pct","observed":63.3,"benchmark":50.3,"severity":"medium","note":"Above overall by 13.0 pp"},{"type":"return_rate_high","dimension":"category_x_channel","value":"Books | In-store","metric":"return_rate_pct","observed":54.3,"benchmark":50.3,"severity":"medium","note":"Channel-specific return problem"},{"type":"return_rate_high","dimension":"category_x_channel","value":"Fashion | In-store","metric":"return_rate_pct","observed":54.7,"benchmark":50.3,"severity":"medium","note":"Channel-specific return problem"},{"type":"return_rate_high","dimension":"month","value":"2022-03","metric":"return_rate_pct","observed":59.5,"benchmark":50.3,"severity":"medium","note":"Month with return rate ≥58%"},{"type":"return_rate_high","dimension":"month","value":"2022-05","metric":"return_rate_pct","observed":58.8,"benchmark":50.3,"severity":"medium","note":"Month with return rate ≥58%"},{"type":"return_rate_high","dimension":"month","value":"2022-09","metric":"return_rate_pct","observed":58.2,"benchmark":50.3,"severity":"medium","note":"Month with return rate ≥58%"},{"type":"high_discount","dimension":"transactions","value":"discount/price > p95","metric":"count / discount","observed":150,"benchmark":0.4761,"severity":"medium","note":"150 orders with >47.6% unit discount cost 58538.34; return rate 48.0% (no better than average)"},{"type":"data_quality","dimension":"dataset","value":"return rate ~50% & product-independent prices","metric":"return_rate_pct","observed":50.3,"benchmark":null,"severity":"medium","note":"Pattern suggests synthetic data; treat return insights with caution"},{"type":"return_rate_low","dimension":"product_name","value":"Car Charger","metric":"return_rate_pct","observed":33.7,"benchmark":50.3,"severity":"low","note":"Best-in-class returns (positive exception)"},{"type":"transaction_outlier","dimension":"transactions","value":"net_sales > p99","metric":"count / value","observed":30,"benchmark":1962.18,"severity":"low","note":"30 orders worth 63451.35; return rate 40.0%"},{"type":"transaction_outlier","dimension":"transactions","value":"net_sales < p01","metric":"count / value","observed":30,"benchmark":18.38,"severity":"low","note":"30 tiny orders worth 362.89 in total"},{"type":"customer_behaviour","dimension":"customers","value":"registered, never purchased","metric":"customers","observed":46,"benchmark":1000,"severity":"low","note":"Reactivation target"},{"type":"data_quality","dimension":"dataset","value":"partial months","metric":"rows","observed":110,"benchmark":3000,"severity":"low","note":"2021-03 (6 days) and 2023-03 (25 days) are partial; excluded from month stats"},{"type":"data_quality","dimension":"dataset","value":"bad_date / bad_amount / orphan / duplicate","metric":"rows","observed":0,"benchmark":3000,"severity":"low","note":"No row-level data quality exceptions (Agent 2)"}],"discount_band_returns":[{"band":"0-10%","orders":563,"return_rate_pct":52.4,"net_revenue":197142.25},{"band":"10-20%","orders":604,"return_rate_pct":47.8,"net_revenue":200862.57},{"band":"20-30%","orders":624,"return_rate_pct":51.9,"net_revenue":176500.43},{"band":"30-40%","orders":616,"return_rate_pct":49.4,"net_revenue":165594.52},{"band":"40-50%","orders":593,"return_rate_pct":49.9,"net_revenue":127381.72}],"units_returns":[{"units":1,"orders":569,"return_rate_pct":49.6},{"units":2,"orders":638,"return_rate_pct":50.6},{"units":3,"orders":551,"return_rate_pct":50.6},{"units":4,"orders":635,"return_rate_pct":54},{"units":5,"orders":607,"return_rate_pct":46.3}]},"insights":{"summary":["Returns halve the business. Net sales of 1,715,593.97 become 867,481.49 net revenue after returns. 50.3% of orders (49.4% of value) come back.","Discounts cost 25.8% of gross sales (595,427.08) and show no link to fewer returns.","Revenue is flat to slightly down. The last 11 full months are −2.1% in net sales and −4.6% in net revenue against the same months a year earlier.","Value is concentrated. The top 10% of customers bring in 31.4% of net revenue; 179 customers (18.8% of active) returned every order.","Repeat buying is strong. 84.7% of active customers ordered more than once (3.14 orders each), but 46 registered customers never bought."],"items":[{"title":"Returns are the largest lever on revenue","numbers":"Net sales 1,715,593.97, of which returned value is 848,112.48, leaving net revenue of 867,481.49. Return rate 50.3% of orders and 49.4% of value.","why":"each 5-point cut in the return rate would keep about 85,000 of net sales (5% × 1,715,594), roughly 10% of current net revenue.","action":"Start capturing return reasons and audit the highest-return products first (see insight 6).","confidence":"medium. The figures are exact, but a 50% return rate is unusually even and may reflect synthetic data."},{"title":"Discounts are expensive and don't reduce returns","numbers":"Discounts total 595,427.08 (25.8% of gross 2,311,021.05). The return rate stays at 47.8–52.4% in every discount band from 0–10% to 40–50%. The 150 orders with the deepest discounts (> 47.6% of unit price) cost 58,538.34 and still had a 48.0% return rate.","why":"deeper discounts give away margin without improving whether customers keep the product.","action":"Test a discount cap (for example ≤ 30% of unit price) and track whether order volume falls.","confidence":"medium. This is correlation only; there was no controlled test."},{"title":"Sales are flat year over year","numbers":"Apr 2022–Feb 2023 net sales were 773,760.64 against 790,089.60 for Apr 2021–Feb 2022 (−2.1%). Net revenue was 389,734.57 against 408,656.07 (−4.6%). The full-month average is 36,060.88 net revenue (SD 6,495.02). The best full month was May 2021 (47,075.83) and the weakest was Aug 2021 (23,240.61). Aug 2021 net sales of 45,761.78 fall below the mean minus 2 SD.","why":"there is no growth trend. Net revenue is falling faster than sales because returns are rising slightly.","action":"Find out what caused the Aug 2021 dip (stock or operations) and set growth targets per category.","confidence":"high for the direction; low for seasonality, since there are only two cycles."},{"title":"A small group of customers drives value, and a large group returns almost everything","numbers":"The top 10% of customers (96) bring in 272,033.39, which is 31.4% of net revenue. They average 4.89 orders and have a 34.1% return rate. The bottom 50% (475) bring in 94,582.62 (10.9%) with a 67.1% return rate. 179 customers returned every order.","why":"retention and return-policy decisions should differ by tier.","action":"Run a loyalty programme for the top tier, and review return eligibility for customers who return everything.","confidence":"medium. Tiers are ranked on net revenue after returns, so a high return rate partly causes a low tier ranking."},{"title":"Repeat purchasing is healthy; activation is the gap","numbers":"954 of 1,000 customers are active. 808 (84.7%) ordered at least twice, the average is 3.14 orders per customer, and the most is 10. 146 customers bought once and 46 never bought.","why":"","action":"Send a first-purchase incentive to the 46 inactive customers and a second-order nudge to the 146 one-time buyers.","confidence":"high."},{"title":"Product-level returns vary widely; Car Charger is the model product","numbers":"Highest returns: T-Shirt 63.3%, Motorcycle Helmet 56.7%, Cushion Covers 55.6%. Lowest returns: Car Charger 33.7%, which also has the highest AOV (650.86) and is #2 by net revenue (39,380.85). Top product: Laptop, with 40,053.75 net revenue and a 43.0% return rate. Weakest category: Books, with the lowest net revenue share (14.2%) and the highest return rate (52.7%).","why":"","action":"Review sizing and fit information for T-Shirts and Helmets, and quality for Cushion Covers. Promote Car Charger and Laptop.","confidence":"medium. About 90–125 orders per product means differences of a few points may be noise."},{"title":"Channel and payment method barely matter overall, with two channel-specific problems","numbers":"Channels: In-store has 51.5% of net revenue and Online 48.5%, with almost identical return rates (50.2% vs 50.3%). In-store AOV is slightly higher (581.15 vs 562.25). Payment methods: each holds 19.1–21.8% of net revenue. Exceptions: Fashion in-store returns 54.7% (vs 48.2% online) and Books in-store 54.3%.","why":"","action":"Check in-store Fashion fitting and exchange processes. Don't spend on shifting customers between channels.","confidence":"medium."},{"title":"Customers aged 55+ are the largest segment, at the lowest discount","numbers":"The 55+ band has 23.1% of net revenue (199,993.99) and receives the lowest discount (23.8%). Under-25s have the highest AOV (601.70) but the smallest share (13.0%) and the highest returns (52.8%). The top age × category cell is 55+ × Automotive with 47,165.07 (5.4%).","why":"","action":"Target Automotive and Home promotions at 55+; for under-25s, focus on reducing returns rather than adding discounts.","confidence":"medium."}],"caveats":["The data looks synthetic: about 50% returns, prices spread from 10 to 500 for every product, and very even splits by gender, channel and payment method. The patterns are fine for demonstrating the pipeline; be careful before acting on them as real business facts.","`Discounts` is treated as a per-unit amount (user decision E1). If it is really a per-order amount, net sales would be 2,117,111.78 and every revenue figure would rise.","March 2021 (6 days) and March 2023 (25 days) are partial months; they are excluded from monthly averages and best/worst comparisons.","The currency is unconfirmed.","No row-level data quality problems were found: 0 bad dates or amounts, 0 orphans and 0 duplicates."]},"data_quality":{"rows_transactions":3000,"rows_customers":1000,"active_customers":954,"join_coverage_pct":100.0,"date_parse_success_pct":100.0,"flags":{"is_bad_date":0,"is_bad_amount":0,"is_orphan":0,"is_duplicate":0,"is_partial_month":110},"date_range":{"min":"2021-03-25","max":"2023-03-25","months":25,"partial_months":["2021-03","2023-03"]},"revenue_formula":"gross = units*price; discount_amount = units*discounts; net = units*(price - discounts); kept_net = net where not returned"}}</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+(function(){
+const D = JSON.parse(document.getElementById('dashboard-data').textContent);
+const K = D.kpis.kpis;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt2 = d3.format(',.2f'), fmt0 = d3.format(',.0f'), fmt1 = d3.format('.1f');
+const compact = v => { const a=Math.abs(v); if(a>=1e6) return (v/1e6).toFixed(2)+'M'; if(a>=1e4) return (v/1e3).toFixed(1)+'K'; return fmt0(v); };
+const mLabel = m => { const [y,mo]=m.split('-'); return new Date(+y, +mo-1, 1).toLocaleString('en',{month:'short'})+' '+y; };
+const METRICS = {
+  net_revenue:{label:'Net revenue', f:v=>fmt2(v), axis:compact},
+  net_sales:{label:'Net sales', f:v=>fmt2(v), axis:compact},
+  orders:{label:'Orders', f:v=>fmt0(v), axis:v=>fmt0(v)},
+  aov:{label:'Average order value', f:v=>fmt2(v), axis:v=>fmt0(v)},
+  return_rate_pct:{label:'Return rate', f:v=>fmt1(v)+'%', axis:v=>v+'%'}
+};
+let state = {metric:'net_revenue', channel:'All', plist:'top'};
+
+/* ---------- tooltip ---------- */
+const tip = document.getElementById('tip');
+function showTip(ev, title, rows){
+  tip.replaceChildren();
+  const t=document.createElement('div'); t.className='t'; t.textContent=title; tip.appendChild(t);
+  rows.forEach(([k,v,color])=>{ const r=document.createElement('div'); r.className='r';
+    const a=document.createElement('span'); if(color){const d=document.createElement('i'); d.className='dot'; d.style.background=color; a.appendChild(d);} a.appendChild(document.createTextNode(k));
+    const b=document.createElement('span'); b.textContent=v; r.append(a,b); tip.appendChild(r); });
+  tip.style.opacity=1; moveTip(ev);
+}
+function moveTip(ev){
+  const pad=14, w=tip.offsetWidth, h=tip.offsetHeight;
+  let x=ev.clientX+pad, y=ev.clientY+pad;
+  if(x+w>window.innerWidth-8) x=ev.clientX-w-pad;
+  if(y+h>window.innerHeight-8) y=ev.clientY-h-pad;
+  tip.style.left=Math.max(8,x)+'px'; tip.style.top=Math.max(8,y)+'px';
+}
+function hideTip(){ tip.style.opacity=0; }
+
+/* ---------- tables ---------- */
+function makeTable(container, cols, rows, opts={}){
+  container.replaceChildren();
+  const table=document.createElement('table'); const thead=document.createElement('thead'); const tr=document.createElement('tr');
+  let sortKey=opts.sortKey||null, dir=opts.dir||'descending';
+  cols.forEach(c=>{ const th=document.createElement('th'); th.textContent=c.label; if(c.num) th.className='num';
+    if(opts.sortable){ th.classList.add('th-sort'); th.tabIndex=0; th.setAttribute('role','columnheader');
+      const go=()=>{ if(sortKey===c.key) dir = dir==='descending'?'ascending':'descending'; else {sortKey=c.key; dir=c.num?'descending':'ascending';} render(); };
+      th.addEventListener('click',go); th.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go();}}); }
+    tr.appendChild(th); });
+  thead.appendChild(tr); table.appendChild(thead); const tbody=document.createElement('tbody'); table.appendChild(tbody);
+  function render(){
+    let r=rows.slice();
+    if(sortKey){ const c=cols.find(x=>x.key===sortKey); r.sort((a,b)=>{ const va=c.sortVal?c.sortVal(a):a[sortKey], vb=c.sortVal?c.sortVal(b):b[sortKey];
+      const cmp = (typeof va==='number'&&typeof vb==='number')? va-vb : String(va).localeCompare(String(vb)); return dir==='ascending'?cmp:-cmp; }); }
+    table.querySelectorAll('th').forEach((th,i)=>{ if(opts.sortable) th.setAttribute('aria-sort', cols[i].key===sortKey?dir:'none'); });
+    tbody.replaceChildren();
+    r.forEach(row=>{ const trr=document.createElement('tr'); cols.forEach(c=>{ const td=document.createElement('td'); if(c.num) td.className='num';
+      if(c.render) c.render(td,row); else td.textContent = c.f? c.f(row[c.key]) : (row[c.key]??''); trr.appendChild(td); }); tbody.appendChild(trr); });
+  }
+  render(); container.appendChild(table);
+}
+document.querySelectorAll('[data-table-toggle]').forEach(btn=>{
+  btn.addEventListener('click',()=>{ const id=btn.dataset.tableToggle; const card=document.getElementById(id);
+    const tw=card.querySelector('[data-table-for="'+id+'"]'); const charts=card.querySelectorAll('.chart, .legend');
+    const show = tw.classList.contains('hidden'); tw.classList.toggle('hidden',!show); charts.forEach(c=>c.classList.toggle('hidden',show));
+    btn.textContent = show?'Show chart':'Show table'; if(!show) drawAll(); });
+});
+
+/* ---------- header, tiles, summary ---------- */
+const fmtDate = s => new Date(s+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+document.getElementById('period').textContent = fmtDate(K.date_min)+' to '+fmtDate(K.date_max)+' · '+K.months+' months · '+fmt0(K.orders)+' orders';
+const meta=document.getElementById('meta');
+[['Snapshot', D.generated_at.slice(0,10)],['Currency','not stated (INR likely)'],['Discount','applied per unit']].forEach(([k,v])=>{
+  const c=document.createElement('span'); c.className='chip'; const b=document.createElement('b'); b.textContent=k; c.append(b, document.createTextNode(' '+v)); meta.appendChild(c); });
+const tiles=document.getElementById('kpi-tiles');
+const tileNotes = {
+  net_revenue:'after returns, from '+compact(K.net_sales)+' net sales',
+  net_sales:'gross '+compact(K.gross_revenue)+' minus discounts',
+  orders:fmt0(K.units)+' units, '+K.avg_units_per_order+' per order',
+  aov_net_sales:'net sales ÷ orders',
+  active_customers:'of '+fmt0(K.total_customers)+' registered; '+K.inactive_customers+' never bought',
+  return_rate_orders_pct:fmt1(K.return_rate_value_pct)+'% of net sales value',
+  discount_pct_of_gross:compact(K.discount_amount)+' given away',
+  repeat_rate_pct:fmt0(K.repeat_customers)+' customers; '+K.orders_per_customer+' orders each'
+};
+D.kpis.headline_tiles.forEach((t,i)=>{
+  const el=document.createElement('div'); el.className='tile'+(i===0?' hero':''); el.id='tile-'+t.key;
+  const l=document.createElement('div'); l.className='label'; l.textContent=t.label;
+  const v=document.createElement('div'); v.className='value';
+  v.textContent = t.unit==='%' ? fmt1(t.value)+'%' : (t.key==='aov_net_sales'? fmt2(t.value) : (t.value>=1e5? compact(t.value) : fmt0(t.value)));
+  v.title = t.unit==='%' ? '' : fmt2(t.value);
+  const n=document.createElement('div'); n.className='note'; n.textContent=tileNotes[t.key]||'';
+  el.append(l,v,n); tiles.appendChild(el); });
+const sl=document.getElementById('summary-list');
+D.insights.summary.forEach(s=>{ const li=document.createElement('li'); li.textContent=s; sl.appendChild(li); });
+
+/* ---------- chart helpers ---------- */
+function svgFor(el, h){ el.replaceChildren(); const w=Math.max(280, el.clientWidth||600);
+  const svg=d3.select(el).append('svg').attr('viewBox',`0 0 ${w} ${h}`).attr('height',h).attr('role','img'); return {svg,w,h}; }
+function barPath(x0,y,w,h,r){ // horizontal bar, rounded at the data end
+  r=Math.min(r,h/2,w); if(w<=0) return ''; return `M${x0},${y}H${x0+w-r}Q${x0+w},${y} ${x0+w},${y+r}V${y+h-r}Q${x0+w},${y+h} ${x0+w-r},${y+h}H${x0}Z`; }
+function colPath(x,y0,w,h,r){ r=Math.min(r,w/2,h); if(h<=0) return ''; return `M${x},${y0}V${y0-h+r}Q${x},${y0-h} ${x+r},${y0-h}H${x+w-r}Q${x+w},${y0-h} ${x+w},${y0-h+r}V${y0}Z`; }
+
+/* ---------- monthly trend ---------- */
+function drawTrend(){
+  const el=document.getElementById('chart-trend'); if(el.offsetParent===null) return;
+  const M=D.trends.monthly; const {svg,w,h}=svgFor(el,300);
+  const m={t:12,r:16,b:28,l:52};
+  const x=d3.scalePoint().domain(M.map(d=>d.month)).range([m.l,w-m.r]).padding(.3);
+  const y=d3.scaleLinear().domain([0,d3.max(M,d=>d.net_sales)*1.08]).nice().range([h-m.b,m.t]);
+  const step=x.step();
+  M.filter(d=>d.partial).forEach(d=>svg.append('rect').attr('x',x(d.month)-step/2).attr('y',m.t).attr('width',step).attr('height',h-m.b-m.t).attr('fill',css('--grid')).attr('opacity',.6));
+  svg.append('g').attr('class','gridline').attr('transform',`translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickSize(-(w-m.l-m.r)).tickFormat(''));
+  svg.append('g').attr('class','axis').attr('transform',`translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickFormat(compact).tickSizeOuter(0)).call(g=>g.select('.domain').remove());
+  const every = w<560?6:3;
+  svg.append('g').attr('class','axis').attr('transform',`translate(0,${h-m.b})`).call(d3.axisBottom(x).tickValues(M.map(d=>d.month).filter((d,i)=>i%every===0)).tickFormat(mLabel).tickSizeOuter(0));
+  const series=[['net_sales',css('--s1'),'Net sales'],['net_revenue',css('--s2'),'Net revenue']];
+  series.forEach(([k,c])=>{
+    svg.append('path').datum(M).attr('fill','none').attr('stroke',c).attr('stroke-width',2).attr('stroke-linejoin','round').attr('stroke-linecap','round').attr('d',d3.line().x(d=>x(d.month)).y(d=>y(d[k])));
+    const last=M[M.length-1];
+    svg.append('circle').attr('cx',x(last.month)).attr('cy',y(last[k])).attr('r',4).attr('fill',c).attr('stroke',css('--surface')).attr('stroke-width',2);
+  });
+  const vline=svg.append('line').attr('y1',m.t).attr('y2',h-m.b).attr('stroke',css('--axis')).attr('opacity',0);
+  const dots=series.map(([k,c])=>svg.append('circle').attr('r',4).attr('fill',c).attr('stroke',css('--surface')).attr('stroke-width',2).attr('opacity',0));
+  svg.append('rect').attr('x',m.l).attr('y',m.t).attr('width',w-m.l-m.r).attr('height',h-m.b-m.t).attr('fill','transparent')
+    .on('pointermove',ev=>{ const [px]=d3.pointer(ev); const i=Math.max(0,Math.min(M.length-1,Math.round((px-x(M[0].month))/step))); const d=M[i];
+      vline.attr('x1',x(d.month)).attr('x2',x(d.month)).attr('opacity',1); dots.forEach((c,j)=>c.attr('cx',x(d.month)).attr('cy',y(d[series[j][0]])).attr('opacity',1));
+      showTip(ev, mLabel(d.month)+(d.partial?' (partial, '+d.days+' days)':''), [['Net sales',fmt2(d.net_sales),css('--s1')],['Net revenue',fmt2(d.net_revenue),css('--s2')],['Orders',fmt0(d.orders)],['Return rate',fmt1(d.return_rate_pct)+'%'],['MoM net revenue', d.mom_net_revenue_pct==null?'n/a':(d.mom_net_revenue_pct>0?'+':'')+fmt1(d.mom_net_revenue_pct)+'%']]); })
+    .on('pointerleave',()=>{ hideTip(); vline.attr('opacity',0); dots.forEach(c=>c.attr('opacity',0)); });
+  svg.append('title').text('Monthly net sales and net revenue line chart');
+}
+function drawReturns(){
+  const el=document.getElementById('chart-returns'); if(el.offsetParent===null) return;
+  const M=D.trends.monthly; const {svg,w,h}=svgFor(el,300); const m={t:12,r:16,b:28,l:44};
+  const x=d3.scalePoint().domain(M.map(d=>d.month)).range([m.l,w-m.r]).padding(.3);
+  const y=d3.scaleLinear().domain([30,70]).range([h-m.b,m.t]); const step=x.step();
+  M.filter(d=>d.partial).forEach(d=>svg.append('rect').attr('x',x(d.month)-step/2).attr('y',m.t).attr('width',step).attr('height',h-m.b-m.t).attr('fill',css('--grid')).attr('opacity',.6));
+  svg.append('g').attr('class','gridline').attr('transform',`translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickSize(-(w-m.l-m.r)).tickFormat(''));
+  svg.append('g').attr('class','axis').attr('transform',`translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickFormat(v=>v+'%')).call(g=>g.select('.domain').remove());
+  const every = w<560?6:3;
+  svg.append('g').attr('class','axis').attr('transform',`translate(0,${h-m.b})`).call(d3.axisBottom(x).tickValues(M.map(d=>d.month).filter((d,i)=>i%every===0)).tickFormat(mLabel).tickSizeOuter(0));
+  const avg=K.return_rate_orders_pct;
+  svg.append('line').attr('x1',m.l).attr('x2',w-m.r).attr('y1',y(avg)).attr('y2',y(avg)).attr('stroke',css('--muted')).attr('stroke-dasharray','4 4');
+  svg.append('text').attr('class','vlabel').attr('x',m.l+6).attr('y',y(avg)+14).attr('text-anchor','start').text('Overall '+fmt1(avg)+'%');
+  svg.append('path').datum(M).attr('fill','none').attr('stroke',css('--s1')).attr('stroke-width',2).attr('stroke-linejoin','round').attr('d',d3.line().x(d=>x(d.month)).y(d=>y(d.return_rate_pct)));
+  const hi=M.filter(d=>!d.partial).reduce((a,b)=>b.return_rate_pct>a.return_rate_pct?b:a);
+  svg.append('circle').attr('cx',x(hi.month)).attr('cy',y(hi.return_rate_pct)).attr('r',4).attr('fill',css('--s1')).attr('stroke',css('--surface')).attr('stroke-width',2);
+  svg.append('text').attr('class','vlabel').attr('x',x(hi.month)).attr('y',y(hi.return_rate_pct)-10).attr('text-anchor','middle').text(mLabel(hi.month)+' '+fmt1(hi.return_rate_pct)+'%');
+  const vline=svg.append('line').attr('y1',m.t).attr('y2',h-m.b).attr('stroke',css('--axis')).attr('opacity',0);
+  const dot=svg.append('circle').attr('r',4).attr('fill',css('--s1')).attr('stroke',css('--surface')).attr('stroke-width',2).attr('opacity',0);
+  svg.append('rect').attr('x',m.l).attr('y',m.t).attr('width',w-m.l-m.r).attr('height',h-m.b-m.t).attr('fill','transparent')
+    .on('pointermove',ev=>{ const [px]=d3.pointer(ev); const i=Math.max(0,Math.min(M.length-1,Math.round((px-x(M[0].month))/step))); const d=M[i];
+      vline.attr('x1',x(d.month)).attr('x2',x(d.month)).attr('opacity',1); dot.attr('cx',x(d.month)).attr('cy',y(d.return_rate_pct)).attr('opacity',1);
+      showTip(ev, mLabel(d.month)+(d.partial?' (partial)':''), [['Return rate',fmt1(d.return_rate_pct)+'%'],['Orders',fmt0(d.orders)]]); })
+    .on('pointerleave',()=>{hideTip(); vline.attr('opacity',0); dot.attr('opacity',0);});
+}
+
+/* ---------- segment bars ---------- */
+function segRows(dim){
+  if(dim==='product_category' && state.channel!=='All'){
+    return D.segments.category_x_channel.filter(r=>r.value.endsWith('| '+state.channel)).map(r=>Object.assign({},r,{value:r.value.split(' | ')[0]}));
+  }
+  return D.segments[dim];
+}
+const AGE_ORDER=['<25','25-34','35-44','45-54','55+'];
+function drawSeg(el){
+  if(el.offsetParent===null) return;
+  const dim=el.dataset.seg; const mt=METRICS[state.metric];
+  let rows=segRows(dim).slice();
+  if(dim==='age_band') rows.sort((a,b)=>AGE_ORDER.indexOf(a.value)-AGE_ORDER.indexOf(b.value)); else rows.sort((a,b)=>b[state.metric]-a[state.metric]);
+  const bh=20, gap=10, m={t:4,r:70,b:6,l:Math.min(120, 12+7.2*d3.max(rows,r=>r.value.length))};
+  const h=m.t+m.b+rows.length*(bh+gap); const {svg,w}=svgFor(el,h);
+  const avg = state.metric==='return_rate_pct'? K.return_rate_orders_pct : null;
+  const lo = state.metric==='return_rate_pct'? 0 : 0;
+  const x=d3.scaleLinear().domain([lo, d3.max(rows,r=>r[state.metric])]).range([m.l, w-m.r]);
+  rows.forEach((r,i)=>{
+    const yy=m.t+i*(bh+gap);
+    svg.append('text').attr('class','clabel').attr('x',m.l-8).attr('y',yy+bh/2).attr('dy','.35em').attr('text-anchor','end').text(r.value);
+    svg.append('path').attr('d',barPath(m.l,yy,x(r[state.metric])-m.l,bh,4)).attr('fill',css('--s1'));
+    svg.append('text').attr('class','vlabel').attr('x',x(r[state.metric])+6).attr('y',yy+bh/2).attr('dy','.35em').text(state.metric==='return_rate_pct'?fmt1(r[state.metric])+'%':(state.metric==='orders'?fmt0(r[state.metric]):compact(r[state.metric])));
+    svg.append('rect').attr('x',0).attr('y',yy-gap/2).attr('width',w).attr('height',bh+gap).attr('fill','transparent')
+      .on('pointermove',ev=>showTip(ev, r.value + (dim==='product_category'&&state.channel!=='All'?' · '+state.channel:''), [['Net revenue',fmt2(r.net_revenue)],['Net sales',fmt2(r.net_sales)],['Orders',fmt0(r.orders)],['AOV',fmt2(r.aov)],['Return rate',fmt1(r.return_rate_pct)+'%'],['Discount',fmt1(r.discount_pct)+'% of gross'],['Share of net revenue',fmt1(r.share_net_revenue_pct)+'%']]))
+      .on('pointerleave',hideTip);
+  });
+  if(avg!=null){ svg.append('line').attr('x1',x(avg)).attr('x2',x(avg)).attr('y1',0).attr('y2',h).attr('stroke',css('--muted')).attr('stroke-dasharray','3 3'); }
+  svg.append('title').text(mt.label+' by '+dim.replace(/_/g,' '));
+  const card=el.closest('.card'); const tw=card.querySelector('.tbl-wrap');
+  makeTable(tw,[{key:'value',label:'Segment'},{key:'net_revenue',label:'Net revenue',num:1,f:fmt2},{key:'net_sales',label:'Net sales',num:1,f:fmt2},{key:'orders',label:'Orders',num:1,f:fmt0},{key:'aov',label:'AOV',num:1,f:fmt2},{key:'return_rate_pct',label:'Return %',num:1,f:fmt1},{key:'share_net_revenue_pct',label:'Share %',num:1,f:fmt1}], rows, {sortable:true});
+}
+
+/* ---------- heatmap ---------- */
+function drawHeat(){
+  const el=document.getElementById('chart-heat'); if(el.offsetParent===null) return;
+  const rows=D.segments.age_band_x_category.map(r=>{const [a,c]=r.value.split(' | '); return Object.assign({age:a,cat:c},r);});
+  const cats=D.segments.product_category.map(r=>r.value);
+  const m={t:26,r:8,b:8,l:52}; const cw=Math.max(280,el.clientWidth||600); const cellW=(cw-m.l-m.r)/cats.length; const cellH=40;
+  const h=m.t+m.b+AGE_ORDER.length*cellH; const {svg,w}=svgFor(el,h);
+  const seq=[css('--seq-0'),css('--seq-1'),css('--seq-2'),css('--seq-3'),css('--seq-4'),css('--seq-5'),css('--seq-6')];
+  const ext=d3.extent(rows,r=>r.net_revenue); const q=d3.scaleQuantize().domain(ext).range(seq);
+  cats.forEach((c,j)=>svg.append('text').attr('class','clabel').attr('x',m.l+j*cellW+cellW/2).attr('y',m.t-9).attr('text-anchor','middle').style('font-size', cellW<70?'10.5px':'12px').text(c));
+  AGE_ORDER.forEach((a,i)=>svg.append('text').attr('class','clabel').attr('x',m.l-8).attr('y',m.t+i*cellH+cellH/2).attr('dy','.35em').attr('text-anchor','end').text(a));
+  rows.forEach(r=>{ const i=AGE_ORDER.indexOf(r.age), j=cats.indexOf(r.cat); const fill=q(r.net_revenue); const idx=seq.indexOf(fill);
+    const g=svg.append('g');
+    g.append('rect').attr('x',m.l+j*cellW+1).attr('y',m.t+i*cellH+1).attr('width',cellW-2).attr('height',cellH-2).attr('rx',4).attr('fill',fill);
+    const dark = document.documentElement.dataset.theme==='dark' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
+    const light = dark ? idx<=3 : idx>=4;
+    if(cellW>46) g.append('text').attr('x',m.l+j*cellW+cellW/2).attr('y',m.t+i*cellH+cellH/2).attr('dy','.35em').attr('text-anchor','middle').attr('fill', light?'#ffffff':'#0b0b0b').style('font-size','11.5px').style('font-variant-numeric','tabular-nums').text(compact(r.net_revenue));
+    g.append('rect').attr('x',m.l+j*cellW).attr('y',m.t+i*cellH).attr('width',cellW).attr('height',cellH).attr('fill','transparent')
+      .on('pointermove',ev=>showTip(ev, r.age+' · '+r.cat, [['Net revenue',fmt2(r.net_revenue)],['Orders',fmt0(r.orders)],['AOV',fmt2(r.aov)],['Return rate',fmt1(r.return_rate_pct)+'%'],['Share of net revenue',fmt1(r.share_net_revenue_pct)+'%']])).on('pointerleave',hideTip);
+  });
+  makeTable(document.querySelector('[data-table-for="heatmap"]'),[{key:'age',label:'Age band'},{key:'cat',label:'Category'},{key:'net_revenue',label:'Net revenue',num:1,f:fmt2},{key:'orders',label:'Orders',num:1,f:fmt0},{key:'return_rate_pct',label:'Return %',num:1,f:fmt1}], rows, {sortable:true, sortKey:'net_revenue'});
+}
+
+/* ---------- grouped columns (tiers) and discount bands ---------- */
+function drawTiers(){
+  const el=document.getElementById('chart-tiers'); if(el.offsetParent===null) return;
+  const T=D.segments.customer_value_tiers.tiers.map(t=>Object.assign({cust_share:+(100*t.customers/K.active_customers).toFixed(1)},t));
+  const {svg,w,h}=svgFor(el,260); const m={t:22,r:12,b:44,l:40};
+  const x0=d3.scaleBand().domain(T.map(t=>t.tier)).range([m.l,w-m.r]).paddingInner(.3).paddingOuter(.15);
+  const keys=[['cust_share',css('--s1'),'Share of customers'],['share_net_revenue_pct',css('--s2'),'Share of net revenue']];
+  const bw=Math.min(28,(x0.bandwidth()-2)/2);
+  const y=d3.scaleLinear().domain([0,70]).range([h-m.b,m.t]);
+  svg.append('g').attr('class','gridline').attr('transform',`translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickSize(-(w-m.l-m.r)).tickFormat(''));
+  svg.append('g').attr('class','axis').attr('transform',`translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickFormat(v=>v+'%')).call(g=>g.select('.domain').remove());
+  svg.append('line').attr('x1',m.l).attr('x2',w-m.r).attr('y1',h-m.b).attr('y2',h-m.b).attr('stroke',css('--axis'));
+  T.forEach(t=>{ const cx=x0(t.tier)+x0.bandwidth()/2;
+    keys.forEach(([k,c],j)=>{ const xx = cx - bw - 1 + j*(bw+2);
+      svg.append('path').attr('d',colPath(xx,h-m.b,bw,h-m.b-y(t[k]),4)).attr('fill',c);
+      svg.append('text').attr('class','vlabel').attr('x',xx+bw/2).attr('y',y(t[k])-5).attr('text-anchor','middle').text(fmt1(t[k])+'%'); });
+    svg.append('text').attr('class','clabel').attr('x',cx).attr('y',h-m.b+16).attr('text-anchor','middle').text(t.tier);
+    svg.append('text').attr('class','vlabel').attr('x',cx).attr('y',h-m.b+32).attr('text-anchor','middle').text(fmt0(t.customers)+' customers');
+    svg.append('rect').attr('x',x0(t.tier)).attr('y',m.t).attr('width',x0.bandwidth()).attr('height',h-m.b-m.t).attr('fill','transparent')
+      .on('pointermove',ev=>showTip(ev,t.tier,[['Customers',fmt0(t.customers),css('--s1')],['Share of customers',fmt1(t.cust_share)+'%'],['Net revenue',fmt2(t.net_revenue),css('--s2')],['Share of net revenue',fmt1(t.share_net_revenue_pct)+'%'],['Avg net revenue / customer',fmt2(t.avg_net_revenue_per_customer)],['Avg orders',fmt2(t.avg_orders)],['Return rate',fmt1(t.return_rate_pct)+'%']])).on('pointerleave',hideTip);
+  });
+  makeTable(document.querySelector('[data-table-for="tiers"]'),[{key:'tier',label:'Tier'},{key:'customers',label:'Customers',num:1,f:fmt0},{key:'cust_share',label:'Customer %',num:1,f:fmt1},{key:'net_revenue',label:'Net revenue',num:1,f:fmt2},{key:'share_net_revenue_pct',label:'Revenue %',num:1,f:fmt1},{key:'avg_orders',label:'Avg orders',num:1,f:fmt2},{key:'return_rate_pct',label:'Return %',num:1,f:fmt1}], T);
+}
+function drawDisc(){
+  const el=document.getElementById('chart-disc'); if(el.offsetParent===null) return;
+  const B=D.exceptions.discount_band_returns; const {svg,w,h}=svgFor(el,260); const m={t:22,r:12,b:44,l:40};
+  const x=d3.scaleBand().domain(B.map(b=>b.band)).range([m.l,w-m.r]).padding(.35); const bw=Math.min(28,x.bandwidth());
+  const y=d3.scaleLinear().domain([0,60]).range([h-m.b,m.t]);
+  svg.append('g').attr('class','gridline').attr('transform',`translate(${m.l},0)`).call(d3.axisLeft(y).ticks(3).tickSize(-(w-m.l-m.r)).tickFormat(''));
+  svg.append('g').attr('class','axis').attr('transform',`translate(${m.l},0)`).call(d3.axisLeft(y).ticks(3).tickFormat(v=>v+'%')).call(g=>g.select('.domain').remove());
+  svg.append('line').attr('x1',m.l).attr('x2',w-m.r).attr('y1',h-m.b).attr('y2',h-m.b).attr('stroke',css('--axis'));
+  B.forEach(b=>{ const cx=x(b.band)+x.bandwidth()/2;
+    svg.append('path').attr('d',colPath(cx-bw/2,h-m.b,bw,h-m.b-y(b.return_rate_pct),4)).attr('fill',css('--s1'));
+    svg.append('text').attr('class','vlabel').attr('x',cx).attr('y',y(b.return_rate_pct)-5).attr('text-anchor','middle').text(fmt1(b.return_rate_pct)+'%');
+    svg.append('text').attr('class','clabel').attr('x',cx).attr('y',h-m.b+16).attr('text-anchor','middle').text(b.band);
+    svg.append('text').attr('class','vlabel').attr('x',cx).attr('y',h-m.b+32).attr('text-anchor','middle').text(fmt0(b.orders)+' orders');
+    svg.append('rect').attr('x',x(b.band)-x.step()*x.padding()/2).attr('y',m.t).attr('width',x.step()).attr('height',h-m.b-m.t).attr('fill','transparent')
+      .on('pointermove',ev=>showTip(ev,'Discount '+b.band+' of unit price',[['Orders',fmt0(b.orders)],['Return rate',fmt1(b.return_rate_pct)+'%'],['Net revenue',fmt2(b.net_revenue)]])).on('pointerleave',hideTip);
+  });
+  const avg=K.return_rate_orders_pct; svg.append('line').attr('x1',m.l).attr('x2',w-m.r).attr('y1',y(avg)).attr('y2',y(avg)).attr('stroke',css('--muted')).attr('stroke-dasharray','4 4');
+  makeTable(document.querySelector('[data-table-for="discount-returns"]'),[{key:'band',label:'Discount band'},{key:'orders',label:'Orders',num:1,f:fmt0},{key:'return_rate_pct',label:'Return %',num:1,f:fmt1},{key:'net_revenue',label:'Net revenue',num:1,f:fmt2}], B);
+}
+
+/* ---------- trend tables ---------- */
+function trendTables(){
+  const M=D.trends.monthly;
+  makeTable(document.querySelector('[data-table-for="trend-revenue"]'),[{key:'month',label:'Month',f:v=>mLabel(v)},{key:'net_sales',label:'Net sales',num:1,f:fmt2},{key:'net_revenue',label:'Net revenue',num:1,f:fmt2},{key:'orders',label:'Orders',num:1,f:fmt0},{key:'aov',label:'AOV',num:1,f:fmt2},{key:'mom_net_revenue_pct',label:'MoM %',num:1,f:v=>v==null?'n/a':fmt1(v)},{key:'partial',label:'Partial',f:v=>v?'Yes':''}], M);
+  makeTable(document.querySelector('[data-table-for="trend-returns"]'),[{key:'month',label:'Month',f:v=>mLabel(v)},{key:'return_rate_pct',label:'Return %',num:1,f:fmt1},{key:'orders',label:'Orders',num:1,f:fmt0},{key:'active_customers',label:'Active customers',num:1,f:fmt0}], M);
+}
+
+/* ---------- products ---------- */
+function productTable(){
+  const S=D.segments; const rows = state.plist==='top'?S.top10_products : state.plist==='bottom'?S.bottom10_products : S.all_products;
+  const r2=rows.map((r,i)=>Object.assign({rank:S.all_products.findIndex(p=>p.value===r.value)+1},r));
+  const maxRev=d3.max(S.all_products,r=>r.net_revenue); const avg=K.return_rate_orders_pct;
+  makeTable(document.getElementById('product-table'),[
+    {key:'rank',label:'#',num:1},{key:'value',label:'Product'},
+    {key:'net_revenue',label:'Net revenue',num:1,render:(td,r)=>{ td.style.textAlign='right'; const s=document.createElement('span'); s.className='bar-cell'; s.style.justifyContent='flex-end'; const t=document.createElement('span'); t.textContent=fmt2(r.net_revenue); const b=document.createElement('span'); b.className='b'; b.style.width=Math.round(60*r.net_revenue/maxRev)+'px'; s.append(t,b); td.appendChild(s); }},
+    {key:'orders',label:'Orders',num:1,f:fmt0},{key:'aov',label:'AOV',num:1,f:fmt2},
+    {key:'return_rate_pct',label:'Return %',num:1,render:(td,r)=>{ td.textContent=fmt1(r.return_rate_pct); if(r.return_rate_pct>=avg+5){ const p=document.createElement('span'); p.className='pill sev-medium'; p.style.marginLeft='6px'; const i=document.createElement('i'); p.append(i,document.createTextNode('High')); td.appendChild(p);} else if(r.return_rate_pct<=avg-10){ const p=document.createElement('span'); p.className='pill sev-low'; p.style.marginLeft='6px'; const i=document.createElement('i'); p.append(i,document.createTextNode('Low')); td.appendChild(p);} }},
+  ], r2, {sortable:true, sortKey:'net_revenue', dir: state.plist==='bottom'?'ascending':'descending'});
+}
+
+/* ---------- exceptions ---------- */
+function excTable(){
+  const E=D.exceptions.exceptions; document.getElementById('exc-count').textContent = E.length+' items · '+E.filter(e=>e.severity==='high').length+' high, '+E.filter(e=>e.severity==='medium').length+' medium, '+E.filter(e=>e.severity==='low').length+' low';
+  const so={high:0,medium:1,low:2}; const TYPE={return_rate_high:'High returns',return_rate_low:'Low returns',month_outlier:'Month outlier',transaction_outlier:'Order outliers',high_discount:'Deep discounts',customer_behaviour:'Customers',data_quality:'Data quality'};
+  const fmtObs=e=> e.metric==='return_rate_pct'? fmt1(e.observed)+'%' : (typeof e.observed==='number'? (e.observed>1000?fmt2(e.observed):fmt0(e.observed)) : String(e.observed));
+  makeTable(document.getElementById('exc-table'),[
+    {key:'severity',label:'Severity',sortVal:r=>so[r.severity],render:(td,r)=>{ const p=document.createElement('span'); p.className='pill sev-'+r.severity; const i=document.createElement('i'); p.append(i,document.createTextNode(r.severity[0].toUpperCase()+r.severity.slice(1))); td.appendChild(p);} },
+    {key:'type',label:'Type',f:v=>TYPE[v]||v},{key:'value',label:'Item',f:v=>/^\d{4}-\d{2}$/.test(v)?mLabel(v):v},
+    {key:'observed',label:'Observed',num:1,sortVal:r=>typeof r.observed==='number'?r.observed:0,render:(td,r)=>td.textContent=fmtObs(r)},
+    {key:'note',label:'Note',render:(td,r)=>{td.textContent=r.note; td.style.whiteSpace='normal'; td.style.minWidth='260px';}}
+  ], E, {sortable:true, sortKey:'severity', dir:'ascending'});
+}
+
+/* ---------- insights & footer ---------- */
+function insights(){
+  const box=document.getElementById('insights');
+  D.insights.items.forEach((it,i)=>{ const c=document.createElement('article'); c.className='ins'; c.id='insight-'+(i+1);
+    const n=document.createElement('div'); n.className='n'; n.textContent='Insight '+(i+1)+' of '+D.insights.items.length;
+    const h=document.createElement('h3'); h.textContent=it.title;
+    const p=document.createElement('p'); p.textContent=it.numbers;
+    const a=document.createElement('p'); a.className='act'; const b=document.createElement('b'); b.textContent='Action: '; a.append(b, document.createTextNode(it.action));
+    const cf=document.createElement('div'); cf.className='conf'; cf.textContent='Confidence: '+it.confidence;
+    c.append(n,h,p,a,cf); box.appendChild(c); });
+  const cv=document.getElementById('caveats'); const t=document.createElement('b'); t.textContent='Data caveats. '; cv.append(t, document.createTextNode(D.insights.caveats.join(' ')));
+  const Q=D.data_quality; const dq=document.getElementById('dq');
+  [['Transactions',fmt0(Q.rows_transactions)],['Customers',fmt0(Q.rows_customers)+' ('+Q.active_customers+' active)'],['Join coverage',fmt1(Q.join_coverage_pct)+'%'],['Dates parsed',fmt1(Q.date_parse_success_pct)+'%'],['Flagged rows','0 bad · '+Q.flags.is_partial_month+' in partial months'],['Revenue formula','Units × (Price − Discounts)'],['Source','Supabase tbl_transactions + tbl_customers, read-only'],['Generated',D.generated_at.replace('T',' ').slice(0,16)]].forEach(([k,v])=>{
+    const d=document.createElement('div'); const s=document.createElement('span'); s.textContent=k; const b=document.createElement('b'); b.textContent=v; b.style.cssText='display:block;color:var(--ink);font-size:14px;font-weight:600;margin-top:2px'; d.append(s,b); dq.appendChild(d); });
+}
+
+/* ---------- controls ---------- */
+function bindSeg(id, attr, key, after){
+  document.getElementById(id).querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+    state[key]=b.dataset[attr]; document.getElementById(id).querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', x===b?'true':'false')); after(); }));
+}
+bindSeg('metric-seg','metric','metric',()=>document.querySelectorAll('[data-seg]').forEach(drawSeg));
+bindSeg('channel-seg','channel','channel',()=>drawSeg(document.querySelector('[data-seg="product_category"]')));
+bindSeg('product-seg','plist','plist',productTable);
+
+function drawAll(){ drawTrend(); drawReturns(); document.querySelectorAll('[data-seg]').forEach(drawSeg); drawHeat(); drawTiers(); drawDisc(); }
+trendTables(); productTable(); excTable(); insights(); drawAll();
+let rt; window.addEventListener('resize',()=>{clearTimeout(rt); rt=setTimeout(drawAll,120);});
+new MutationObserver(drawAll).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',drawAll);
+})();
+</script>
+<script>
+(function(){
+/* Agent 5 chatbot. Knowledge = #dashboard-data (Agent 3 aggregates + insights) only. No database, no external calls. */
+const D = JSON.parse(document.getElementById('dashboard-data').textContent);
+const K = D.kpis.kpis, S = D.segments, T = D.trends, E = D.exceptions;
+const panel = document.getElementById('chat-panel');
+panel.insertAdjacentHTML('beforeend', document.getElementById('chat-template').innerHTML);
+const log=document.getElementById('chat-log'), form=document.getElementById('chat-form'), input=document.getElementById('chat-input'), send=document.getElementById('chat-send'), modeEl=document.getElementById('chat-mode');
+const f2=n=>Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}), f0=n=>Number(n).toLocaleString('en-US'), f1=n=>Number(n).toFixed(1);
+const mLabel=m=>{const [y,mo]=m.split('-');return new Date(+y,+mo-1,1).toLocaleString('en',{month:'short'})+' '+y;};
+const SNAP = D.generated_at.slice(0,10);
+
+const fab=document.createElement('button'); fab.className='ask-fab'; fab.type='button'; fab.textContent='Ask the data';
+fab.addEventListener('click',()=>{ document.getElementById('chat-card').scrollIntoView({behavior: matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth', block:'center'}); setTimeout(()=>input.focus({preventScroll:true}),300); });
+document.body.appendChild(fab);
+new IntersectionObserver(es=>es.forEach(e=>fab.style.display=e.isIntersecting?'none':'')).observe(document.getElementById('chat-card'));
+
+const SUGG=['Which category has the highest return rate?','How did revenue trend by month?','Which channel has the best AOV?','Who are our most valuable customers?','Do bigger discounts reduce returns?','What should we fix first?'];
+const sg=document.getElementById('chat-sugg');
+SUGG.forEach(q=>{const b=document.createElement('button'); b.type='button'; b.textContent=q; b.addEventListener('click',()=>ask(q)); sg.appendChild(b);});
+
+function addMsg(role, text, src){
+  const d=document.createElement('div'); d.className='msg '+role; d.textContent=text;
+  if(src){const s=document.createElement('span'); s.className='src'; s.textContent=src; d.appendChild(s);}
+  log.appendChild(d); log.scrollTop=log.scrollHeight; return d;
+}
+addMsg('bot','Ask me about revenue, returns, discounts, products, channels, customer segments or trends. I answer only from the aggregated figures on this dashboard (snapshot '+SNAP+'). I can’t look up individual customers.');
+
+/* ---------- privacy guard: runs before anything is sent ---------- */
+const PII = /\b(e-?mail|phone|mobile|contact (details|number|info)|address|name of (the )?customer|customer names?|who (exactly|specifically) (is|are)|list (the |all )?customers|customer ids?|STU-\d{1,4}|personal (data|details|info))\b|[\w.+-]+@[\w-]+\.[\w.]+|\b\d{10}\b/i;
+const PII_REPLY = 'I can’t share personal details about individual customers: names, emails, phone numbers, IDs or lists of specific people. This dashboard only holds aggregated figures. I can tell you about customer groups instead, for example the value tiers (top 10% of customers bring in '+f1(S.customer_value_tiers.tiers[0].share_net_revenue_pct)+'% of net revenue).';
+
+/* ---------- context for Claude ---------- */
+const CTX = JSON.stringify({
+  snapshot:SNAP, period:{from:K.date_min,to:K.date_max,months:K.months,partial_months:['2021-03 (6 days)','2023-03 (25 days)']},
+  currency:'not stated (INR likely); show numbers without a symbol',
+  definitions:D.kpis.definitions||{net_sales:'units*(price-discounts) for all orders',net_revenue:'net sales of orders not returned (headline)',aov:'net sales / orders',discount:'per-unit amount: discount_amount = units*discounts'},
+  kpis:K, monthly:T.monthly, monthly_summary:T.summary, day_of_week:T.day_of_week, yearly:T.yearly,
+  segments:{product_category:S.product_category,purchase_channel:S.purchase_channel,mode_of_payment:S.mode_of_payment,age_band:S.age_band,gender:S.gender,location:S.location,category_x_channel:S.category_x_channel,age_band_x_category:S.age_band_x_category,products:S.all_products,customer_value_tiers:S.customer_value_tiers},
+  exceptions:E.exceptions, discount_band_returns:E.discount_band_returns, units_returns:E.units_returns,
+  insights:D.insights, data_quality:D.data_quality
+});
+const SYSTEM = `You are the analyst chatbot inside an e-commerce dashboard. Follow these rules:
+1. Answer ONLY from the DATA JSON below. Quote the exact numbers and name the section they come from (e.g. "segments.product_category"). Never estimate, invent or use outside knowledge about this business.
+2. If the data cannot answer, say so plainly and suggest which analysis would (e.g. "re-run Agent 3 with a breakdown by X").
+3. Never reveal, guess or discuss individual customers: no names, emails, phone numbers, customer IDs or row-level records. The data holds aggregates only. Refuse such requests briefly and offer an aggregate alternative.
+4. You cannot run SQL or reach any system. The numbers are a snapshot from ${SNAP}; mention this when timing matters.
+5. Net revenue means sales after discounts EXCLUDING returned orders; net sales includes them. Discounts are applied per unit. Currency is not stated: show numbers without a currency symbol.
+6. Be concise: 2-6 sentences or a short list. Plain text, no markdown tables, no headings.
+DATA:
+${CTX}`;
+
+let sample=null, history=[], busy=false;
+modeEl.textContent='Answers from built-in summaries until Claude connects';
+(window.claude&&claude.use?claude.use('sample'):Promise.resolve(null)).then(s=>{ if(s){ sample=s; modeEl.textContent='Answers by Claude, from this dashboard’s figures only'; } else { modeEl.textContent='Answers from built-in summaries (Claude is not available in this view)'; } });
+
+/* ---------- built-in answers (used when Claude is unavailable) ---------- */
+const maxBy=(a,k)=>a.reduce((x,y)=>y[k]>x[k]?y:x), minBy=(a,k)=>a.reduce((x,y)=>y[k]<x[k]?y:x);
+function dimFor(q){
+  if(/categor/.test(q)) return ['product_category','category'];
+  if(/channel|online|in-?store/.test(q)) return ['purchase_channel','channel'];
+  if(/payment|upi|card|cash|net banking/.test(q)) return ['mode_of_payment','payment method'];
+  if(/\bage|young|old/.test(q)) return ['age_band','age band'];
+  if(/gender|male|female/.test(q)) return ['gender','gender'];
+  if(/city|location|cities|pune|mumbai|delhi/.test(q)) return ['location','city'];
+  if(/product|item|sku/.test(q)) return ['all_products','product'];
+  return null;
+}
+function local(qRaw){
+  const q=qRaw.toLowerCase(); const dm=dimFor(q);
+  const metric = /return/.test(q)?['return_rate_pct','return rate',v=>f1(v)+'%']
+               : /aov|order value|basket/.test(q)?['aov','average order value',f2]
+               : /order/.test(q)&&!/value/.test(q)?['orders','orders',f0]
+               : ['net_revenue','net revenue',f2];
+  const low = /lowest|worst|least|bottom|weakest|smallest|fewest/.test(q);
+  if(/discount/.test(q)){
+    const B=E.discount_band_returns;
+    return {t:`Discounts cost ${f2(K.discount_amount)}, which is ${f1(K.discount_pct_of_gross)}% of gross sales (${f2(K.gross_revenue)}). The return rate barely changes with discount depth: ${B.map(b=>b.band+' '+f1(b.return_rate_pct)+'%').join(', ')}. So bigger discounts do not reduce returns.`, s:'kpis, exceptions.discount_band_returns'};
+  }
+  if(/fix|priorit|recommend|should we|action|improve/.test(q)){
+    return {t:'Top priorities from the insights:\n1. '+D.insights.items[0].title+': '+D.insights.items[0].action+'\n2. '+D.insights.items[1].title+': '+D.insights.items[1].action+'\n3. '+D.insights.items[5].title+': '+D.insights.items[5].action, s:'insights 1, 2 and 6'};
+  }
+  if(/valuable|best customers|top customers|tier|loyal|concentrat/.test(q)){
+    const t=S.customer_value_tiers.tiers;
+    return {t:`By net revenue tier: the top 10% (${t[0].customers} customers) bring in ${f2(t[0].net_revenue)}, which is ${f1(t[0].share_net_revenue_pct)}% of net revenue, with a ${f1(t[0].return_rate_pct)}% return rate. The middle 40% bring ${f1(t[1].share_net_revenue_pct)}%, and the bottom 50% only ${f1(t[2].share_net_revenue_pct)}% with a ${f1(t[2].return_rate_pct)}% return rate. ${S.customer_value_tiers.customers_all_orders_returned} customers returned every order. I can only show groups, not individual customers.`, s:'segments.customer_value_tiers'};
+  }
+  if(/repeat|retention|one-?time|inactive|never/.test(q)){
+    return {t:`${f0(K.repeat_customers)} of ${f0(K.active_customers)} active customers (${f1(K.repeat_rate_pct)}%) ordered more than once, averaging ${K.orders_per_customer} orders each. ${K.inactive_customers} registered customers never bought.`, s:'kpis'};
+  }
+  if(/trend|month|over time|growth|grow|year|season/.test(q) && !dm){
+    const sm=T.summary, y=sm.yoy_11m;
+    return {t:`Revenue is flat to slightly down. Comparing ${y.current} with ${y.prior}, net sales changed ${f1(y.net_sales_change_pct)}% and net revenue ${f1(y.net_revenue_change_pct)}%. The best full month was ${mLabel(sm.best_full_month.month)} (${f2(sm.best_full_month.net_revenue)} net revenue) and the weakest was ${mLabel(sm.worst_full_month.month)} (${f2(sm.worst_full_month.net_revenue)}). A full month averages ${f2(sm.mean_net_revenue)}. March 2021 and March 2023 are partial months.`, s:'trends.summary'};
+  }
+  if(dm){
+    const rows=S[dm[0]]; const r = low?minBy(rows,metric[0]):maxBy(rows,metric[0]);
+    const all = rows.length<=10 ? ' All values: '+rows.slice().sort((a,b)=>b[metric[0]]-a[metric[0]]).map(x=>x.value+' '+metric[2](x[metric[0]])).join(', ')+'.' : '';
+    return {t:`The ${dm[1]} with the ${low?'lowest':'highest'} ${metric[1]} is ${r.value} at ${metric[2](r[metric[0]])}.${all}`, s:'segments.'+dm[0]};
+  }
+  if(/return/.test(q)) return {t:`${f1(K.return_rate_orders_pct)}% of orders were returned (${f1(K.return_rate_value_pct)}% of net sales value, ${f2(K.returned_value)}). That turns ${f2(K.net_sales)} net sales into ${f2(K.net_revenue)} net revenue.`, s:'kpis'};
+  if(/aov|order value/.test(q)) return {t:`Average order value is ${f2(K.aov_net_sales)} (net sales ÷ orders) across ${f0(K.orders)} orders.`, s:'kpis'};
+  if(/revenue|sales|total|how much|kpi|overview|summary/.test(q)) return {t:`Net revenue (after returns) is ${f2(K.net_revenue)}. Net sales before returns are ${f2(K.net_sales)}, gross sales ${f2(K.gross_revenue)}, and discounts ${f2(K.discount_amount)}. There were ${f0(K.orders)} orders from ${f0(K.active_customers)} active customers between ${K.date_min} and ${K.date_max}.`, s:'kpis'};
+  return {t:'I can’t answer that from this dashboard’s data. It covers revenue, returns, discounts, orders, products, categories, channels, payment methods, age bands, gender, cities, monthly trends and customer value tiers. For anything else, the analysis (Agent 3) would need a new breakdown.', s:'no matching data'};
+}
+
+/* ---------- ask ---------- */
+async function ask(q){
+  q=(q||'').trim(); if(!q||busy) return;
+  input.value=''; addMsg('user',q);
+  if(PII.test(q)){ addMsg('bot',PII_REPLY,'privacy rule'); return; }
+  if(!sample){ const a=local(q); addMsg('bot',a.t,'Built-in answer · '+a.s); return; }
+  busy=true; send.disabled=true;
+  const bubble=addMsg('bot','Thinking…');
+  const convo=history.slice(-6).concat([{role:'user',content:q}]);
+  const first = SYSTEM + '\n\n' + (convo.length>1 ? 'Conversation so far:\n'+convo.slice(0,-1).map(m=>(m.role==='user'?'User: ':'Assistant: ')+m.content).join('\n')+'\n\n' : '') + 'QUESTION: ' + q;
+  try{
+    const res = await sample(first,{cache:false, onText:({text})=>{ bubble.textContent=text; log.scrollTop=log.scrollHeight; }});
+    const text=(res && res.text) || bubble.textContent;
+    bubble.textContent=text; const s=document.createElement('span'); s.className='src'; s.textContent='Claude · from dashboard snapshot '+SNAP+(res&&res.truncated?' · answer cut short':''); bubble.appendChild(s);
+    history.push({role:'user',content:q},{role:'assistant',content:text});
+  }catch(err){
+    if(err && err.code==='not_granted'){ sample=null; modeEl.textContent='Answers from built-in summaries (Claude access not granted)'; bubble.remove(); const a=local(q); addMsg('bot',a.t,'Built-in answer · '+a.s); }
+    else if(err && err.code==='rate_limited'){ bubble.classList.add('err'); bubble.textContent='Too many questions at once. Wait a moment and ask again.'; }
+    else { bubble.remove(); const a=local(q); addMsg('bot',a.t,'Built-in answer (Claude was unavailable) · '+a.s); }
+  }finally{ busy=false; send.disabled=false; input.focus({preventScroll:true}); }
+}
+form.addEventListener('submit',e=>{e.preventDefault(); ask(input.value);});
+})();
+</script>
+</body>
+</html>
